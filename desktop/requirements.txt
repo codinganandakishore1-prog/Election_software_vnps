@@ -1,0 +1,13 @@
+# Desktop — CustomTkinter Voting Application
+customtkinter>=5.2.0
+Pillow>=10.0.0
+requests>=2.31.0
+websockets>=12.0
+fakeredis>=2.21.0
+sqlalchemy>=2.0.0
+pymysql>=1.1.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Shared package
+-e ../shared

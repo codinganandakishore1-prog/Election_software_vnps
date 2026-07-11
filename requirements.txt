@@ -1,0 +1,7 @@
+# Election Management Platform — Root Dependencies
+# Install all components:
+#   pip install -r requirements.txt
+
+-r backend/requirements.txt
+-r website/requirements.txt
+-r desktop/requirements.txt

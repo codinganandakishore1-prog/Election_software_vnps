@@ -1,0 +1,5 @@
+"""Desktop dependency injection."""
+
+from desktop.app.dependencies.container import DesktopContainer, get_desktop_container
+
+__all__ = ["DesktopContainer", "get_desktop_container"]

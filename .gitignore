@@ -214,5 +214,15 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Streamlit
-.streamlit/secrets.toml
+# Application data
+backend/logs/
+backend/uploads/
+backend/generated_reports/
+backend/backups/
+desktop/logs/
+desktop/data/
+*.log
+
+# Legacy root app (preserved reference)
+candidate_images/
+election_data.json
