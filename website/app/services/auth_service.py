@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 from nicegui import app
 
 from app.dependencies.container import get_website_container
@@ -104,6 +105,46 @@ class AuthService:
             )
 
         return True, "Signed in successfully."
+
+    @staticmethod
+    def get_refresh_token() -> str | None:
+        token = app.storage.user.get("refresh_token")
+        return token if token else None
+
+    @staticmethod
+    async def refresh_access_token() -> bool:
+        """Exchange the refresh token for a new access token. Returns True on success."""
+        refresh_token = AuthService.get_refresh_token()
+        if not refresh_token:
+            return False
+
+        try:
+            client = get_website_container().api_client
+            # Call refresh endpoint directly to avoid recursive 401 retry loops.
+            async with httpx.AsyncClient(timeout=client.timeout) as http:
+                response = await http.post(
+                    client._url("/auth/refresh"),
+                    json={"refresh_token": refresh_token},
+                    headers={"Accept": "application/json"},
+                )
+            success, _message, data = client.parse_response(response)
+            if not success or not isinstance(data, dict) or not data.get("access_token"):
+                return False
+            app.storage.user["access_token"] = data["access_token"]
+            # Keep refresh token; backend reuse is allowed for the same session.
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
+    async def ensure_fresh_session() -> bool:
+        """Refresh silently when possible. Returns False if the user must sign in again."""
+        if not AuthService.is_authenticated():
+            return False
+        if await AuthService.refresh_access_token():
+            return True
+        # Access token may still be valid even if refresh fails unexpectedly.
+        return AuthService.has_backend_token()
 
     @staticmethod
     async def _backend_login(username: str, password: str) -> tuple[bool, str, dict | None]:

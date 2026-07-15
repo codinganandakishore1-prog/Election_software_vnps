@@ -10,7 +10,6 @@ from app.dependencies.container import DESKTOP_ROOT, get_desktop_container
 from app.ui.background_manager import BackgroundManager
 from app.ui.screens.admin_login import AdminLoginScreen
 from app.ui.screens.admin_panel import AdminPanelScreen
-from app.ui.screens.settings_screen import SettingsScreen
 from app.ui.screens.voting_screen import VotingScreen
 
 logger = get_logger("desktop.application")
@@ -48,19 +47,13 @@ class DesktopApp:
         )
         self.next_vote_btn.configure(command=self.voting_screen.start_session)
 
-        self.settings_screen = SettingsScreen(
-            root=self.root,
-            store=self.container.store,
-            bg_manager=self.bg_manager,
-            mode_state=self.mode_state,
-        )
-
         self.admin_login = AdminLoginScreen(
             root=self.root,
             store=self.container.store,
             on_success=self._open_admin_panel,
         )
 
+        self.theme_btn: ctk.CTkButton | None = None
         self._build_utility_tray()
         self.bg_manager.refresh_welcome()
         self.container.sync_manager.start()
@@ -87,18 +80,29 @@ class DesktopApp:
         button.place(relx=0.49, rely=0.70, anchor="nw")
         return button
 
+    def _theme_button_label(self) -> str:
+        return "Light Mode" if self.mode_state["mode"] == "dark" else "Dark Mode"
+
+    def _toggle_appearance(self) -> None:
+        self.mode_state["mode"] = "light" if self.mode_state["mode"] == "dark" else "dark"
+        ctk.set_appearance_mode(self.mode_state["mode"])
+        if self.theme_btn is not None:
+            self.theme_btn.configure(text=self._theme_button_label())
+        self.bg_manager.refresh_auto()
+
     def _build_utility_tray(self) -> None:
         utility_tray = ctk.CTkFrame(self.root, fg_color="transparent")
         utility_tray.place(relx=1.0, rely=1.0, anchor="se", x=-20, y=-20)
 
-        ctk.CTkButton(
+        self.theme_btn = ctk.CTkButton(
             utility_tray,
-            text="⚙️",
+            text=self._theme_button_label(),
             width=110,
             fg_color="#2b2b2b",
             hover_color="#3a3a3a",
-            command=self.settings_screen.open,
-        ).pack(side="left", padx=5)
+            command=self._toggle_appearance,
+        )
+        self.theme_btn.pack(side="left", padx=5)
         ctk.CTkButton(
             utility_tray,
             text="🔒",
@@ -115,6 +119,7 @@ class DesktopApp:
             config_service=self.container.config_service,
             sync_manager=self.container.sync_manager,
             diagnostics_service=self.container.diagnostics_service,
+            on_config_installed=self.bg_manager.refresh_welcome,
         ).open()
 
     def run(self) -> None:

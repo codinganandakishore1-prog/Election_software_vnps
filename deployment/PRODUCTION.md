@@ -15,5 +15,9 @@
 #      if you need browser-side calls; server-side uses BACKEND_HOST automatically.
 #   4. Keep election-api at 1 instance (WebSocket + rate limits are in-process).
 #   5. Uploads/reports persist on the /data disk attached to election-api.
+#   6. JWT: access tokens last 12h (JWT_EXPIRY=720); refresh tokens 30 days.
+#      The website auto-refreshes access tokens so admins should not see
+#      "invalid/expired token" mid-session. Do not rotate JWT_SECRET casually
+#      or all existing sessions will be forced to sign in again.
 #
 # Migrations run automatically on API container start (RUN_MIGRATIONS=true).

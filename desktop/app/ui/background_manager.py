@@ -43,13 +43,18 @@ class BackgroundManager:
         return ctk.get_appearance_mode().lower()
 
     def _background_path(self, screen: str) -> str:
-        mode = self._appearance_mode()
         if screen == "welcome":
-            key = "background_path_light" if mode == "light" else "background_path_dark"
+            key = "background_path_welcome"
+            fallback = "assets/backgrounds/default_welcome_bg.png"
         else:
+            mode = self._appearance_mode()
             key = "background_path_dark" if mode == "dark" else "background_path_light"
-        default = "default_light_bg.png" if mode == "light" else "default_dark_bg.png"
-        return self._resolve_path(self.app_data.get(key, default))
+            fallback = (
+                "assets/backgrounds/default_dark_bg.png"
+                if mode == "dark"
+                else "assets/backgrounds/default_light_bg.png"
+            )
+        return self._resolve_path(self.app_data.get(key, fallback))
 
     def _screen_size(self) -> tuple[int, int]:
         self.root.update_idletasks()

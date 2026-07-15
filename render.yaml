@@ -75,8 +75,15 @@ services:
         generateValue: true
       - key: JWT_ALGORITHM
         value: HS256
+      # Access token lifetime in minutes (12 hours) — website auto-refreshes before hard expiry.
       - key: JWT_EXPIRY
-        value: "60"
+        value: "720"
+      # Keep signed-in sessions usable for a full month without re-login.
+      - key: JWT_REFRESH_EXPIRY_DAYS
+        value: "30"
+      # Voting-node tokens last through a multi-day election window.
+      - key: NODE_JWT_EXPIRY_HOURS
+        value: "72"
       - key: UPLOAD_FOLDER
         value: /data/uploads
       - key: REPORT_FOLDER

@@ -12,6 +12,7 @@ from election_platform.utils.checksum import CHECKSUM_FILENAME, compute_director
 
 DEFAULT_DISPLAY_SETTINGS = {
     "password": "1234",
+    "background_path_welcome": "assets/backgrounds/default_welcome_bg.png",
     "background_path_light": "assets/backgrounds/default_light_bg.png",
     "background_path_dark": "assets/backgrounds/default_dark_bg.png",
     "image_size": 140,
@@ -66,6 +67,11 @@ class ElectionStore:
         for key, value in DEFAULT_ELECTION_DATA.items():
             data.setdefault(key, value)
         self._data = data
+        theme_path = self.config_dir / "Theme.json"
+        if theme_path.exists():
+            theme_data = self._read_json(theme_path, default={})
+            if isinstance(theme_data, dict):
+                self._apply_theme_backgrounds(theme_data)
         return data
 
     @property
@@ -156,6 +162,7 @@ class ElectionStore:
         election_data = self._read_json(staging / "Election.json")
         positions_data = self._read_json(staging / "Positions.json", default=[])
         candidates_data = self._read_json(staging / "Candidates.json", default=[])
+        theme_data = self._read_json(staging / "Theme.json", default={})
 
         if staging.exists():
             for item in self.config_dir.iterdir():
@@ -218,6 +225,7 @@ class ElectionStore:
         self._data["candidates"] = candidates
         self._data["election_id"] = election_data.get("id", "")
         self._data["election_version"] = election_data.get("version", 0)
+        self._apply_theme_backgrounds(theme_data if isinstance(theme_data, dict) else {})
         self.save()
         return {
             "election_id": self._data["election_id"],
@@ -225,6 +233,22 @@ class ElectionStore:
             "positions": len(positions),
             "candidates": len(candidates),
         }
+
+    def _apply_theme_backgrounds(self, theme_data: dict) -> None:
+        """Map website theme backgrounds onto local display paths after package install."""
+        assets = theme_data.get("assets") or {}
+        mapping = {
+            "background_welcome": "background_path_welcome",
+            "background_light": "background_path_light",
+            "background_dark": "background_path_dark",
+        }
+        for asset_key, store_key in mapping.items():
+            relative = assets.get(asset_key)
+            if not relative:
+                continue
+            full_path = self.config_dir / relative
+            if full_path.exists():
+                self._data[store_key] = str(full_path)
 
     @staticmethod
     def _read_json(path: Path, default: dict | list | None = None):

@@ -34,9 +34,9 @@ class Settings(BaseAppSettings):
     # JWT
     jwt_secret: str = Field(default="change-me-in-production", alias="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
-    jwt_access_expiry_minutes: int = Field(default=60, alias="JWT_EXPIRY")
-    jwt_refresh_expiry_days: int = Field(default=7, alias="JWT_REFRESH_EXPIRY_DAYS")
-    node_jwt_expiry_hours: int = Field(default=24, alias="NODE_JWT_EXPIRY_HOURS")
+    jwt_access_expiry_minutes: int = Field(default=720, alias="JWT_EXPIRY")
+    jwt_refresh_expiry_days: int = Field(default=30, alias="JWT_REFRESH_EXPIRY_DAYS")
+    node_jwt_expiry_hours: int = Field(default=72, alias="NODE_JWT_EXPIRY_HOURS")
 
     # Paths — defaults resolve under backend/; production/Docker use absolute /data/* paths.
     upload_folder: Path = Field(default=BACKEND_ROOT / "uploads", alias="UPLOAD_FOLDER")
