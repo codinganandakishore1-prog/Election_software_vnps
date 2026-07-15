@@ -1,0 +1,54 @@
+name: Build Windows Desktop EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - Production-Deployment
+    paths:
+      - "desktop/**"
+      - "shared/**"
+      - "deployment/scripts/build_desktop_windows.*"
+      - ".github/workflows/build-windows-desktop.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r desktop/requirements.txt pyinstaller
+
+      - name: Build EXE
+        env:
+          PYTHONPATH: ${{ github.workspace }}\shared;${{ github.workspace }}\desktop
+        run: |
+          python -m PyInstaller --noconfirm --clean desktop/packaging/ElectionVotingNode.spec
+
+      - name: Zip portable folder
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\ElectionVotingNode\* -DestinationPath dist\ElectionVotingNode-Windows.zip -Force
+
+      - name: Upload folder artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElectionVotingNode-Windows
+          path: dist/ElectionVotingNode/**
+          if-no-files-found: error
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ElectionVotingNode-Windows-zip
+          path: dist/ElectionVotingNode-Windows.zip
+          if-no-files-found: error

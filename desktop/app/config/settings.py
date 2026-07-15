@@ -7,14 +7,17 @@ from election_platform.config.base import BaseAppSettings
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-DESKTOP_ROOT = Path(__file__).resolve().parents[2]
+from app.runtime_paths import data_root, resource_root
+
+_DATA_ROOT = data_root()
+_RESOURCE_ROOT = resource_root()
 
 
 class DesktopSettings(BaseAppSettings):
     """Desktop-specific settings."""
 
     model_config = SettingsConfigDict(
-        env_file=DESKTOP_ROOT.parent / ".env",
+        env_file=(_DATA_ROOT / ".env", _RESOURCE_ROOT.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -23,13 +26,13 @@ class DesktopSettings(BaseAppSettings):
     api_prefix: str = Field(default="/api/v1", alias="API_PREFIX")
     node_id: str = Field(default="", alias="NODE_ID")
     node_secret: str = Field(default="", alias="NODE_SECRET")
-    config_dir: Path = Field(default=DESKTOP_ROOT / "data" / "config", alias="DESKTOP_CONFIG_DIR")
-    log_dir: Path = Field(default=DESKTOP_ROOT / "logs", alias="DESKTOP_LOG_DIR")
+    config_dir: Path = Field(default=_DATA_ROOT / "data" / "config", alias="DESKTOP_CONFIG_DIR")
+    log_dir: Path = Field(default=_DATA_ROOT / "logs", alias="DESKTOP_LOG_DIR")
 
     # Local database (independent from website MySQL; SQLite preferred per SRS)
     local_db_engine: str = Field(default="sqlite", alias="LOCAL_DB_ENGINE")
     local_db_path: Path = Field(
-        default=DESKTOP_ROOT / "data" / "local_election.db",
+        default=_DATA_ROOT / "data" / "local_election.db",
         alias="LOCAL_DB_PATH",
     )
     local_db_host: str = Field(default="localhost", alias="LOCAL_DB_HOST")

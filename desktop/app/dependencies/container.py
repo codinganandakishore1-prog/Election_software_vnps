@@ -1,13 +1,12 @@
 """Desktop service container."""
 
-from pathlib import Path
-
 from app.config.settings import settings
 from app.data.election_store import ElectionStore
 from app.database.init_db import initialize_local_database
 from app.health.diagnostics import DiagnosticsService
 from app.health.heartbeat_manager import HeartbeatManager
 from app.health.recovery_manager import RecoveryManager
+from app.runtime_paths import data_root, resource_root
 from app.services.api_client import APIClient
 from app.services.config_service import ConfigService
 from app.services.local_vote_queue_service import LocalVoteQueueService
@@ -17,7 +16,8 @@ from app.sync.queue_manager import QueueManager
 from app.sync.retry_manager import RetryManager
 from app.sync.sync_manager import SyncManager
 
-DESKTOP_ROOT = Path(__file__).resolve().parents[2]
+# Bundled assets root (source tree or PyInstaller _MEIPASS).
+DESKTOP_ROOT = resource_root()
 
 
 class DesktopContainer:
@@ -26,7 +26,7 @@ class DesktopContainer:
     def __init__(self, website_url: str | None = None) -> None:
         initialize_local_database()
 
-        self.store = ElectionStore(base_dir=DESKTOP_ROOT, data_dir=DESKTOP_ROOT / "data")
+        self.store = ElectionStore(base_dir=resource_root(), data_dir=data_root() / "data")
         resolved_url = website_url or self.store.data.get("website_url") or settings.website_url
         self.api_client = APIClient(base_url=resolved_url)
         self.queue_manager = QueueManager()
