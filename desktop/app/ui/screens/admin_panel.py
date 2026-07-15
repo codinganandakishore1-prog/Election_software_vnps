@@ -282,7 +282,7 @@ class AdminPanelScreen:
         self._field_label(body, "Election ID")
         election_entry = self._prefilled_entry(body, default_election)
 
-        self._field_label(body, "Node token (optional)")
+        self._field_label(body, "Node token (optional if Node ID/Secret saved)")
         token_entry = self._prefilled_entry(body, "")
 
         def download_from_server() -> None:

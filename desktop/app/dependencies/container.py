@@ -35,9 +35,6 @@ class DesktopContainer:
         self.recovery_manager = RecoveryManager(self.queue_manager)
         self.recovery_manager.recover()
 
-        self.config_service = ConfigService(self.api_client, self.store)
-        self.vote_service = VoteService(self.store, self.queue_service)
-
         node_id = self.store.data.get("node_id") or settings.node_id
         node_secret = self.store.data.get("node_secret") or settings.node_secret
         config_version = int(self.store.data.get("election_version") or 0)
@@ -46,6 +43,12 @@ class DesktopContainer:
             node_id=node_id,
             node_secret=node_secret,
         )
+        self.config_service = ConfigService(
+            self.api_client,
+            self.store,
+            node_authenticator=self.node_authenticator,
+        )
+        self.vote_service = VoteService(self.store, self.queue_service)
         self.sync_manager = SyncManager(
             self.api_client,
             self.queue_manager,

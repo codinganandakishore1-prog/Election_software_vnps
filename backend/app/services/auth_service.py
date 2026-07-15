@@ -24,6 +24,13 @@ from app.security.password import PasswordHasher
 from app.services.base import BaseService
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Normalize naive/aware datetimes for safe comparison (SQLite may strip tz)."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class AuthService(BaseService):
     """Handles login, logout, JWT, and node authentication."""
 
@@ -140,7 +147,7 @@ class AuthService(BaseService):
         if session is None:
             raise AuthenticationError("Session expired or revoked")
 
-        if session.expires_at <= utc_now():
+        if _as_utc(session.expires_at) <= utc_now():
             session.session_status = SessionStatus.EXPIRED
             self.user_session_repository.commit()
             raise AuthenticationError("Session expired")

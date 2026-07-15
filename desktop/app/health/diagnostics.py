@@ -56,7 +56,8 @@ class DiagnosticsService:
 
     def _check_network(self) -> bool:
         try:
-            response = requests.get(f"{self.website_url}/api/v1/health", timeout=3)
+            # Health lives at /health (not under /api/v1).
+            response = requests.get(f"{self.website_url}/health", timeout=3)
             return response.status_code < 500
         except Exception:
             return False

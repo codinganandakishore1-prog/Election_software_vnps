@@ -42,7 +42,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
     def _limits_for_path(self, path: str) -> tuple[int, int]:
-        if path.endswith("/auth/login") or path.endswith("/auth/node-login"):
+        # Keep the strict limit on interactive admin login only.
+        # Node login uses the general API limit so voting machines behind one
+        # school NAT are less likely to get false "Too many requests" errors.
+        if path.endswith("/auth/login"):
             return settings.login_rate_limit_requests, settings.rate_limit_window_seconds
         return settings.rate_limit_requests, settings.rate_limit_window_seconds
 
