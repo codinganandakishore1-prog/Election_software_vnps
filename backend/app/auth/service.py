@@ -1,7 +1,5 @@
-"""Authentication module facade (placeholder)."""
+"""Authentication module facade."""
 
+from app.services.auth_service import AuthService
 
-class AuthModule:
-    """Facade for authentication operations."""
-
-    pass
+__all__ = ["AuthService"]

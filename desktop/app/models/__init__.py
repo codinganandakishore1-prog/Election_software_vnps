@@ -1,5 +1,7 @@
 """Desktop ORM models."""
 
-from desktop.app.models.local_vote import LocalVote
+from app.models.desktop_setting import LocalSetting
+from app.models.local_vote import LocalVote
+from app.models.queue import LocalQueueItem
 
-__all__ = ["LocalVote"]
+__all__ = ["LocalQueueItem", "LocalSetting", "LocalVote"]

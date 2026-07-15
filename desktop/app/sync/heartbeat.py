@@ -1,13 +1,5 @@
-"""Heartbeat manager (placeholder)."""
+"""Heartbeat manager re-export."""
 
+from app.health.heartbeat_manager import HeartbeatManager
 
-class HeartbeatManager:
-    """Send periodic heartbeats to the website."""
-
-    # Implementation deferred to health monitoring phase.
-
-    def start(self) -> None:
-        pass
-
-    def stop(self) -> None:
-        pass
+__all__ = ["HeartbeatManager"]

@@ -1,5 +1,5 @@
-"""Authentication module (placeholder)."""
+"""Authentication module."""
 
-from app.auth.service import AuthModule
+from app.auth.service import AuthService
 
-__all__ = ["AuthModule"]
+__all__ = ["AuthService"]

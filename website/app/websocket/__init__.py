@@ -1,5 +1,6 @@
-"""Website WebSocket package."""
+"""WebSocket package."""
 
-from website.app.websocket.client import WebSocketClient
+from app.websocket.bus import EventBus, event_bus
+from app.websocket.client import WebSocketClient
 
-__all__ = ["WebSocketClient"]
+__all__ = ["EventBus", "WebSocketClient", "event_bus"]

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -16,7 +16,7 @@ class Base(DeclarativeBase):
 
 
 class UUIDPrimaryKeyMixin:
-    """UUID primary key mixin."""
+    """UUID primary key mixin (CHAR(36))."""
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -26,7 +26,7 @@ class UUIDPrimaryKeyMixin:
 
 
 class TimestampMixin:
-    """Created/updated timestamp mixin."""
+    """Created/updated timestamp mixin (UTC)."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -38,4 +38,14 @@ class TimestampMixin:
         default=utc_now,
         onupdate=utc_now,
         nullable=False,
+    )
+
+
+class SoftDeleteMixin:
+    """Soft-delete fields for master records."""
+
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )

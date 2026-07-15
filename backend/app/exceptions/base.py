@@ -17,9 +17,19 @@ class AuthenticationError(AppException):
         super().__init__(message, status.HTTP_401_UNAUTHORIZED)
 
 
+class ForbiddenError(AppException):
+    def __init__(self, message: str = "Forbidden") -> None:
+        super().__init__(message, status.HTTP_403_FORBIDDEN)
+
+
 class ValidationError(AppException):
     def __init__(self, message: str = "Validation failed") -> None:
         super().__init__(message, status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+class NotFoundError(AppException):
+    def __init__(self, message: str = "Resource not found") -> None:
+        super().__init__(message, status.HTTP_404_NOT_FOUND)
 
 
 class NodeOfflineError(AppException):

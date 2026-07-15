@@ -1,5 +1,13 @@
-"""Desktop repositories package."""
+"""Desktop repository layer."""
 
-from desktop.app.repositories.vote_repository import LocalVoteRepository
+from app.repositories.base import LocalBaseRepository
+from app.repositories.local_vote_repository import LocalVoteRepository
+from app.repositories.queue_repository import LocalQueueRepository
+from app.repositories.settings_repository import LocalSettingsRepository
 
-__all__ = ["LocalVoteRepository"]
+__all__ = [
+    "LocalBaseRepository",
+    "LocalQueueRepository",
+    "LocalSettingsRepository",
+    "LocalVoteRepository",
+]

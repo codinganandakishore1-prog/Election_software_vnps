@@ -1,4 +1,4 @@
-"""Role-based permission checking (placeholder)."""
+"""Role-based permission checking."""
 
 from election_platform.enums.roles import UserRole
 

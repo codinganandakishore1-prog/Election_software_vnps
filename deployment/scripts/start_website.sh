@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Start NiceGUI website
+# Start NiceGUI website (development)
 set -euo pipefail
-cd "$(dirname "$0")/../../website"
-export PYTHONPATH="${PYTHONPATH:-}:$(pwd)"
-python -m app.main
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${ROOT}/website"
+export PYTHONPATH="${ROOT}/shared:${ROOT}/website${PYTHONPATH:+:${PYTHONPATH}}"
+python3 -m app.main

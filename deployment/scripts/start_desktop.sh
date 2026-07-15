@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Start desktop voting application
 set -euo pipefail
-cd "$(dirname "$0")/../../desktop"
-export PYTHONPATH="${PYTHONPATH:-}:$(pwd)"
-python -m app.main
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "${ROOT}/desktop"
+export PYTHONPATH="${ROOT}/shared:${ROOT}/desktop${PYTHONPATH:+:${PYTHONPATH}}"
+python3 -m app.main

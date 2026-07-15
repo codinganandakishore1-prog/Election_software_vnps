@@ -151,6 +151,11 @@ activemq-data/
 .env
 .envrc
 .venv
+
+# Local SQLite bootstrap DB
+backend/data/
+*.db
+*.db-journal
 env/
 venv/
 ENV/

@@ -1,6 +1,13 @@
-"""Vote synchronization engine (placeholder)."""
+"""Vote synchronization engine."""
 
-from desktop.app.sync.queue_manager import QueueManager
-from desktop.app.sync.sync_manager import SyncManager
+from app.sync.node_auth import NodeAuthenticator
+from app.sync.queue_manager import QueueManager
+from app.sync.retry_manager import RetryManager
+from app.sync.sync_logger import SyncLogger
 
-__all__ = ["QueueManager", "SyncManager"]
+__all__ = [
+    "NodeAuthenticator",
+    "QueueManager",
+    "RetryManager",
+    "SyncLogger",
+]

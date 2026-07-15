@@ -1,0 +1,137 @@
+# Render Blueprint — Election Management Platform
+# https://render.com/docs/blueprint-spec
+#
+# Deploys:
+#   - election-api      (FastAPI, WebSockets, uploads on disk)
+#   - election-website  (NiceGUI admin portal)
+#   - election-mysql    (MySQL 8 private service + disk)
+#
+# Keep the API at 1 instance (in-memory WebSocket manager + rate limits).
+# After first deploy, set CORS_ORIGINS to the public website URL if prompted.
+
+services:
+  - type: pserv
+    name: election-mysql
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deployment/mysql/Dockerfile
+    dockerContext: .
+    disk:
+      name: election-mysql-data
+      mountPath: /var/lib/mysql
+      sizeGB: 10
+    envVars:
+      - key: MYSQL_DATABASE
+        value: election_db
+      - key: MYSQL_USER
+        value: election
+      - key: MYSQL_PASSWORD
+        generateValue: true
+      - key: MYSQL_ROOT_PASSWORD
+        generateValue: true
+
+  - type: web
+    name: election-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    numInstances: 1
+    healthCheckPath: /health
+    disk:
+      name: election-api-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LOG_TO_FILE
+        value: "false"
+      - key: PORT
+        value: "10000"
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: DATABASE_HOST
+        fromService:
+          name: election-mysql
+          type: pserv
+          property: host
+      - key: DATABASE_PORT
+        value: "3306"
+      - key: DATABASE_NAME
+        value: election_db
+      - key: DATABASE_USER
+        value: election
+      - key: DATABASE_PASSWORD
+        fromService:
+          name: election-mysql
+          type: pserv
+          envVarKey: MYSQL_PASSWORD
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRY
+        value: "60"
+      - key: UPLOAD_FOLDER
+        value: /data/uploads
+      - key: REPORT_FOLDER
+        value: /data/reports
+      - key: BACKUP_FOLDER
+        value: /data/backups
+      - key: CONFIG_PACKAGE_FOLDER
+        value: /data/config_packages
+      - key: LOG_FOLDER
+        value: /data/logs
+      # Set to https://<election-website>.onrender.com after deploy (or when prompted).
+      - key: CORS_ORIGINS
+        sync: false
+      - key: RATE_LIMIT_REQUESTS
+        value: "120"
+      - key: RATE_LIMIT_WINDOW_SECONDS
+        value: "60"
+      - key: LOGIN_RATE_LIMIT_REQUESTS
+        value: "10"
+
+  - type: web
+    name: election-website
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./website/Dockerfile
+    dockerContext: .
+    numInstances: 1
+    healthCheckPath: /
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LOG_TO_FILE
+        value: "false"
+      - key: PORT
+        value: "10000"
+      - key: WEBSITE_HOST
+        value: 0.0.0.0
+      - key: WEBSITE_PORT
+        value: "10000"
+      - key: WEBSITE_RELOAD
+        value: "false"
+      - key: WEBSITE_STORAGE_SECRET
+        generateValue: true
+      - key: API_PREFIX
+        value: /api/v1
+      # Private-network URL to the API (server-side HTTP + WebSocket).
+      - key: BACKEND_HOST
+        fromService:
+          name: election-api
+          type: web
+          property: hostport
+      # Optional public API URL override (leave blank to use http://BACKEND_HOST).
+      - key: BACKEND_URL
+        sync: false
