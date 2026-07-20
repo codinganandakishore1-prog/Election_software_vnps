@@ -87,10 +87,15 @@ async def list_nodes(
     container: ServiceContainer,
     election_type: ElectionType | None = Query(default=None),
     house_id: str | None = Query(default=None),
+    active_only: bool = Query(default=False),
 ) -> APIResponse[list[NodeResponse]]:
     """List all voting nodes."""
     _ = current_user
-    nodes = container.node_service.list_nodes(election_type=election_type, house_id=house_id)
+    nodes = container.node_service.list_nodes(
+        election_type=election_type,
+        house_id=house_id,
+        active_only=active_only,
+    )
     return APIResponse.ok(data=nodes)
 
 
@@ -117,3 +122,15 @@ async def update_node(
     """Update node name, election type, house assignment, or active status."""
     node = container.node_service.update_node_assignment(node_id, payload, user_id=current_user.id)
     return APIResponse.ok(message="Node updated successfully", data=node)
+
+
+@router.delete("/{node_id}")
+async def delete_node(
+    node_id: str,
+    current_user: CurrentUser,
+    container: ServiceContainer,
+    _: None = AdminUser,
+) -> APIResponse[None]:
+    """Delete (deactivate) a voting node."""
+    container.node_service.delete_node(node_id, user_id=current_user.id)
+    return APIResponse.ok(message="Node deleted successfully")

@@ -38,11 +38,13 @@ def register_regular_election_routes() -> None:
 
         state: dict[str, Any] = {
             "election_id": "",
+            "elections": [],
             "positions": [],
             "candidates": [],
             "nodes": [],
             "validation": None,
         }
+        election_buttons: ui.row
 
         with admin_shell("/regular-election") as content:
             with content:
@@ -59,12 +61,8 @@ def register_regular_election_routes() -> None:
                         "to manage the regular election."
                     ).classes("text-warning text-caption q-mb-md")
 
-                with ui.row().classes("w-full q-col-gutter-md q-mb-md items-end"):
-                    election_select = ui.select(
-                        label="Election",
-                        options={},
-                        with_input=True,
-                    ).props("outlined dense emit-value map-options").classes("col-12 col-md-4")
+                ui.label("Election").classes("text-caption text-grey-7 q-mb-xs")
+                election_buttons = ui.row().classes("w-full q-gutter-sm q-mb-md flex-wrap")
 
                 tabs = ui.tabs().classes("w-full")
                 with tabs:
@@ -90,23 +88,46 @@ def register_regular_election_routes() -> None:
                 with validation_panel:
                     ui.label("Select an election to validate.").classes("text-caption text-grey-6")
 
+                def render_election_buttons() -> None:
+                    election_buttons.clear()
+                    with election_buttons:
+                        if not state["elections"]:
+                            ui.label("No elections available.").classes("text-caption text-grey-6")
+                            return
+                        for election in state["elections"]:
+                            election_id = election["id"]
+                            label = election.get("election_name") or election.get("name", "Election")
+                            status = election.get("status", "")
+                            button_label = f"{label} ({status})" if status else label
+                            is_selected = election_id == state["election_id"]
+                            props = "unelevated color=primary" if is_selected else "outline color=primary"
+
+                            def _make_handler(eid: str = election_id):
+                                async def _handler() -> None:
+                                    if state["election_id"] == eid:
+                                        return
+                                    state["election_id"] = eid
+                                    render_election_buttons()
+                                    await refresh_all()
+
+                                return _handler
+
+                            ui.button(button_label, on_click=_make_handler()).props(props)
+
                 async def load_elections() -> None:
                     success, message, elections = await ElectionService.list_elections()
                     if not success:
                         ui.notify(message or "Could not load elections", type="negative")
+                        state["elections"] = []
+                        render_election_buttons()
                         return
-                    options = {
-                        election["id"]: election.get("election_name") or election.get("name", "Election")
-                        for election in elections
-                    }
-                    election_select.options = options
-                    if options and not state["election_id"]:
-                        state["election_id"] = next(iter(options))
-                        election_select.value = state["election_id"]
-                    elif not options:
-                        election_select.value = None
+                    state["elections"] = elections
+                    valid_ids = {item["id"] for item in elections}
+                    if not elections:
                         state["election_id"] = ""
-                    election_select.update()
+                    elif state["election_id"] not in valid_ids:
+                        state["election_id"] = elections[0]["id"]
+                    render_election_buttons()
                     await refresh_all()
 
                 async def refresh_positions() -> None:
@@ -183,13 +204,22 @@ def register_regular_election_routes() -> None:
                                     f'Class {class_text}-{section_text}'
                                 ).classes("text-caption")
 
-                async def refresh_nodes() -> None:
+                def render_nodes() -> None:
                     nodes_panel.clear()
-                    success, message, nodes = await HouseService.list_nodes(election_type="Regular")
-                    if not success:
-                        ui.notify(message or "Could not load nodes", type="negative")
-                    state["nodes"] = nodes if success else []
                     with nodes_panel:
+                        with ui.row().classes("w-full items-center justify-between q-mb-md"):
+                            ui.label(
+                                "Register regular voting machines here. These nodes are separate from "
+                                "House Election nodes — manage house machines under House Election."
+                            ).classes("text-body2 text-grey-7")
+                            if _can_edit():
+                                ui.button(
+                                    "Register Node",
+                                    icon="add",
+                                    color="primary",
+                                    on_click=open_create_node_dialog,
+                                ).props("unelevated")
+
                         if not state["nodes"]:
                             with ui.element("div").classes("emp-placeholder w-full"):
                                 ui.icon("computer", size="xl").classes("text-grey-5 q-mb-md")
@@ -197,10 +227,147 @@ def register_regular_election_routes() -> None:
                                     "text-h6 text-weight-medium"
                                 )
                             return
+
                         for node in state["nodes"]:
-                            with ui.card().classes("w-full"):
-                                ui.label(node.get("node_name", "Node")).classes("text-subtitle1")
-                                ui.label(f'Status: {node.get("status", "—")}').classes("text-caption")
+                            with ui.element("div").classes("emp-card q-pa-md w-full q-mb-sm"):
+                                with ui.row().classes("items-center justify-between w-full"):
+                                    with ui.column().classes("gap-0"):
+                                        ui.label(node.get("node_name", "Node")).classes("text-subtitle1")
+                                        ui.label(f'Status: {node.get("status", "—")}').classes("text-caption")
+                                    if _can_edit():
+                                        ui.button(
+                                            icon="delete",
+                                            on_click=lambda n=node: delete_node(n),
+                                        ).props("flat round dense color=negative")
+
+                async def refresh_nodes() -> None:
+                    success, message, nodes = await HouseService.list_nodes(election_type="Regular")
+                    if not success:
+                        ui.notify(message or "Could not load nodes", type="negative")
+                    state["nodes"] = nodes if success else []
+                    render_nodes()
+
+                def open_create_node_dialog() -> None:
+                    node_error.visible = False
+                    node_name_input.value = ""
+                    node_dialog.open()
+
+                async def delete_node(node: dict[str, Any]) -> None:
+                    with ui.dialog() as confirm_dialog, ui.card().classes("q-pa-md"):
+                        ui.label("Delete Node?").classes("text-h6")
+                        ui.label(
+                            f'Remove "{node.get("node_name", "")}"? '
+                            "It will be deactivated and can no longer sync votes."
+                        ).classes("text-body2 q-mt-sm")
+                        with ui.row().classes("q-mt-md justify-end q-gutter-sm"):
+                            ui.button("Cancel", on_click=confirm_dialog.close).props("flat")
+                            ui.button(
+                                "Delete",
+                                color="negative",
+                                on_click=lambda: confirm_dialog.submit("delete"),
+                            ).props("unelevated")
+
+                    result = await confirm_dialog
+                    if result != "delete":
+                        return
+
+                    success, message = await HouseService.delete_node(node["id"])
+                    if success:
+                        ui.notify("Node deleted", type="positive")
+                        await refresh_nodes()
+                    else:
+                        ui.notify(message or "Could not delete node", type="negative")
+
+                def show_node_credentials(registration: dict[str, Any]) -> None:
+                    node_id_value.set_text(registration.get("id") or "")
+                    node_secret_value.set_text(registration.get("node_secret") or "")
+                    credentials_dialog.open()
+
+                async def copy_text(label: str, value: str) -> None:
+                    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+                    await ui.run_javascript(f"navigator.clipboard.writeText('{escaped}')")
+                    ui.notify(f"{label} copied", type="positive")
+
+                async def copy_node_id() -> None:
+                    await copy_text("Node ID", node_id_value.text or "")
+
+                async def copy_node_secret() -> None:
+                    await copy_text("Node Secret", node_secret_value.text or "")
+
+                async def save_node() -> None:
+                    node_error.visible = False
+                    name = (node_name_input.value or "").strip()
+                    if not name:
+                        node_error.text = "Node name is required."
+                        node_error.visible = True
+                        return
+
+                    success, message, registration = await HouseService.create_node(
+                        {
+                            "node_name": name,
+                            "election_type": "Regular",
+                            "house_id": None,
+                            "active": True,
+                        }
+                    )
+                    if success and registration:
+                        node_dialog.close()
+                        ui.notify("Node registered", type="positive")
+                        await refresh_nodes()
+                        show_node_credentials(registration)
+                    else:
+                        node_error.text = message or "Could not register node"
+                        node_error.visible = True
+
+                node_dialog = ui.dialog()
+                node_error = ui.label("").classes("text-negative text-caption")
+                node_error.visible = False
+                node_name_input = ui.input("Node Name").props("outlined dense").classes("w-full")
+                with node_dialog, ui.card().classes("q-pa-md").style("min-width: 420px") as regular_node_card:
+                    ui.label("Register Regular Node").classes("text-h6 q-mb-md")
+                    node_name_input.move(regular_node_card)
+                    node_error.move(regular_node_card)
+                    with ui.row().classes("q-mt-md justify-end q-gutter-sm"):
+                        ui.button("Cancel", on_click=node_dialog.close).props("flat")
+                        ui.button(
+                            "Register",
+                            color="primary",
+                            on_click=lambda: ui.timer(0, save_node, once=True),
+                        ).props("unelevated")
+
+                credentials_dialog = ui.dialog().props("persistent")
+                with credentials_dialog, ui.card().classes("q-pa-md").style("min-width: 480px"):
+                    ui.label("Save Node Credentials").classes("text-h6")
+                    ui.label(
+                        "Copy these values now. The Node Secret is shown only once and cannot be recovered later."
+                    ).classes("text-body2 text-warning q-mt-sm q-mb-md")
+                    ui.label("Node ID").classes("text-caption text-grey-7")
+                    with ui.row().classes("w-full items-center q-gutter-sm q-mb-md"):
+                        node_id_value = ui.label("").classes("text-body2 text-weight-medium").style(
+                            "word-break: break-all; flex: 1"
+                        )
+                        ui.button(
+                            icon="content_copy",
+                            on_click=lambda: ui.timer(0, copy_node_id, once=True),
+                        ).props("flat round dense")
+                    ui.label("Node Secret").classes("text-caption text-grey-7")
+                    with ui.row().classes("w-full items-center q-gutter-sm q-mb-md"):
+                        node_secret_value = ui.label("").classes("text-body2 text-weight-medium").style(
+                            "word-break: break-all; flex: 1"
+                        )
+                        ui.button(
+                            icon="content_copy",
+                            on_click=lambda: ui.timer(0, copy_node_secret, once=True),
+                        ).props("flat round dense")
+                    ui.label(
+                        "Enter both on the voting PC under Admin → Node Config."
+                    ).classes("text-caption text-grey-7 q-mb-md")
+                    with ui.row().classes("justify-end"):
+                        ui.button(
+                            "I've saved these",
+                            color="primary",
+                            on_click=credentials_dialog.close,
+                        ).props("unelevated")
 
                 async def refresh_validation() -> None:
                     validation_panel.clear()
@@ -244,12 +411,4 @@ def register_regular_election_routes() -> None:
                     await refresh_nodes()
                     await refresh_validation()
 
-                async def on_election_change() -> None:
-                    state["election_id"] = election_select.value or ""
-                    await refresh_all()
-
-                election_select.on(
-                    "update:model-value",
-                    lambda: ui.timer(0, on_election_change, once=True),
-                )
                 ui.timer(0.1, load_elections, once=True)

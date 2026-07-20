@@ -12,6 +12,7 @@ from app.dependencies.container import get_website_container
 from app.services.auth_service import AuthService
 from app.theme import apply_saved_theme, inject_theme
 from app.websocket.client import WebSocketClient
+from app.websocket.page_session import WebSocketPageSession, safe_ui_update
 
 
 def register_node_monitor_routes() -> None:
@@ -26,6 +27,7 @@ def register_node_monitor_routes() -> None:
         state: dict[str, Any] = {"nodes": [], "ws_connected": False}
         ui_refs: dict[str, Any] = {}
         ws_client: WebSocketClient | None = None
+        ws_session = WebSocketPageSession()
 
         def apply_nodes(nodes: list[dict[str, Any]]) -> None:
             state["nodes"] = nodes
@@ -104,17 +106,17 @@ def register_node_monitor_routes() -> None:
             token = AuthService.get_access_token()
             response = await client.get("/nodes", headers={"Authorization": f"Bearer {token}"})
             success, _, data = client.parse_response(response)
-            if success and isinstance(data, list):
-                apply_nodes(data)
+            if success and isinstance(data, list) and ws_session.active:
+                safe_ui_update(lambda: apply_nodes(data))
 
         async def connect_websocket() -> None:
             nonlocal ws_client
             if not AuthService.has_backend_token():
                 return
             ws_client = WebSocketClient(channel="dashboard")
-            ws_client.on("dashboard_snapshot", on_dashboard_snapshot)
-            ws_client.on("heartbeat_received", update_node_from_ws)
-            ws_client.on("node_status", update_node_from_ws)
+            ws_client.on("dashboard_snapshot", ws_session.bind(on_dashboard_snapshot))
+            ws_client.on("heartbeat_received", ws_session.bind(update_node_from_ws))
+            ws_client.on("node_status", ws_session.bind(update_node_from_ws))
             await ws_client.start(AuthService.get_access_token())
 
         with admin_shell("/nodes") as content:
@@ -149,6 +151,7 @@ def register_node_monitor_routes() -> None:
         await connect_websocket()
 
         async def cleanup() -> None:
+            ws_session.deactivate()
             if ws_client is not None:
                 await ws_client.stop()
 

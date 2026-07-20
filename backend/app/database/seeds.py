@@ -43,9 +43,9 @@ DEFAULT_USER_SEEDS = (
 
 HOUSE_SEEDS = (
     {"id": "00000000-0000-4000-8000-000000000101", "house_name": "Pallava", "color": "#C0392B"},
-    {"id": "00000000-0000-4000-8000-000000000102", "house_name": "Pandya", "color": "#2980B9"},
+    {"id": "00000000-0000-4000-8000-000000000102", "house_name": "Pandya", "color": "#F1C40F"},
     {"id": "00000000-0000-4000-8000-000000000103", "house_name": "Chera", "color": "#27AE60"},
-    {"id": "00000000-0000-4000-8000-000000000104", "house_name": "Chola", "color": "#F39C12"},
+    {"id": "00000000-0000-4000-8000-000000000104", "house_name": "Chola", "color": "#2980B9"},
 )
 
 ROLE_DESCRIPTIONS = {

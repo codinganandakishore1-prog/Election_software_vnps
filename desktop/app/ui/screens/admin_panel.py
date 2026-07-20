@@ -447,11 +447,31 @@ class AdminPanelScreen:
         website_entry = self._prefilled_entry(body, default_url)
 
         def save_node_config() -> None:
+            node_id = node_id_entry.get().strip()
+            node_secret = node_secret_entry.get().strip()
+            website_url = website_entry.get().strip()
+            if not node_id or not node_secret:
+                messagebox.showerror(
+                    "Error",
+                    "Node ID and Node Secret are both required.",
+                    parent=win,
+                )
+                return
+            if not website_url:
+                messagebox.showerror("Error", "Website / API URL is required.", parent=win)
+                return
             self.store.update(
-                node_id=node_id_entry.get().strip(),
-                node_secret=node_secret_entry.get().strip(),
-                website_url=website_entry.get().strip(),
+                node_id=node_id,
+                node_secret=node_secret,
+                website_url=website_url,
             )
+            # Apply immediately — do not require restarting the desktop app.
+            self.config_service.apply_node_settings(
+                node_id=node_id,
+                node_secret=node_secret,
+                website_url=website_url,
+            )
+            self.diagnostics_service.website_url = website_url.rstrip("/")
             messagebox.showinfo("Success", "Node configuration saved.", parent=win)
             self._close_dialog(win)
 

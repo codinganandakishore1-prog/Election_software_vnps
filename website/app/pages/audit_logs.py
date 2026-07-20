@@ -78,16 +78,18 @@ def register_audit_logs_routes() -> None:
                         label="Module",
                         options={"all": "All modules"},
                         value="all",
-                    ).props("outlined dense").classes("col-12 col-md-3")
+                    ).props("outlined dense emit-value map-options").classes("col-12 col-md-3")
 
                     search_input = ui.input(
                         "Search",
                         placeholder="Search action, module, or user",
                     ).props("outlined dense clearable").classes("col-12 col-md-5")
 
-                    refresh_button = ui.button("Refresh", icon="refresh").props("outline color=primary").classes(
-                        "col-12 col-md-2"
-                    )
+                    refresh_button = ui.button(
+                        "Refresh",
+                        icon="refresh",
+                        on_click=lambda: ui.timer(0, load_logs, once=True),
+                    ).props("outline color=primary").classes("col-12 col-md-2")
 
                 summary_label = ui.label("").classes("text-caption text-grey-7 q-mb-sm")
                 table_container = ui.column().classes("w-full")
@@ -187,21 +189,21 @@ def register_audit_logs_routes() -> None:
                             prev_btn.enabled = state["page"] > 1
                             next_btn.enabled = state["page"] < total_pages
 
-                            def go_prev() -> None:
+                            async def go_prev() -> None:
                                 if state["page"] > 1:
                                     state["page"] -= 1
-                                    ui.run(load_logs)
+                                    await load_logs()
 
-                            def go_next() -> None:
+                            async def go_next() -> None:
                                 total_pages_inner = max(
                                     1, (state["total"] + state["page_size"] - 1) // state["page_size"]
                                 )
                                 if state["page"] < total_pages_inner:
                                     state["page"] += 1
-                                    ui.run(load_logs)
+                                    await load_logs()
 
-                            prev_btn.on("click", go_prev)
-                            next_btn.on("click", go_next)
+                            prev_btn.on("click", lambda: ui.timer(0, go_prev, once=True))
+                            next_btn.on("click", lambda: ui.timer(0, go_next, once=True))
 
                 async def load_modules() -> None:
                     success, _, modules = await AuditLogService.list_modules()
@@ -211,6 +213,7 @@ def register_audit_logs_routes() -> None:
                     for module in modules:
                         options[module] = module
                     module_filter.options = options
+                    module_filter.update()
 
                 async def load_logs() -> None:
                     success, message, data = await AuditLogService.list_audit_logs(
@@ -233,19 +236,24 @@ def register_audit_logs_routes() -> None:
                     render_table()
                     render_pagination()
 
-                def on_module_change() -> None:
-                    state["module_filter"] = module_filter.value
+                async def on_module_change() -> None:
+                    state["module_filter"] = module_filter.value or "all"
                     state["page"] = 1
-                    ui.run(load_logs)
+                    await load_logs()
 
-                def on_search_change() -> None:
+                async def on_search_change() -> None:
                     state["search"] = search_input.value or ""
                     state["page"] = 1
-                    ui.run(load_logs)
+                    await load_logs()
 
-                module_filter.on("update:model-value", lambda: on_module_change())
-                search_input.on("update:model-value", lambda: on_search_change())
-                refresh_button.on("click", lambda: ui.run(load_logs))
+                module_filter.on(
+                    "update:model-value",
+                    lambda: ui.timer(0, on_module_change, once=True),
+                )
+                search_input.on(
+                    "update:model-value",
+                    lambda: ui.timer(0.4, on_search_change, once=True),
+                )
 
-                ui.timer(0.1, lambda: ui.run(load_modules), once=True)
-                ui.timer(0.2, lambda: ui.run(load_logs), once=True)
+                ui.timer(0.1, load_modules, once=True)
+                ui.timer(0.2, load_logs, once=True)

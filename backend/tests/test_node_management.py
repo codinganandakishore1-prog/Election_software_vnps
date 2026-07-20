@@ -121,6 +121,44 @@ def test_update_node_assignment_can_disable_node() -> None:
     node_repo.commit.assert_called_once()
 
 
+def test_delete_node_deactivates_and_frees_name() -> None:
+    node_repo = MagicMock()
+    node = MagicMock()
+    node.id = "abcdef12-3456-7890-abcd-ef1234567890"
+    node.node_name = "Regular-01"
+    node.election_type = ElectionType.REGULAR
+    node.house_id = None
+    node.active = True
+    node_repo.get_by_id.return_value = node
+
+    election_repo = MagicMock()
+    election_repo.list_by_status.return_value = []
+
+    service = _make_node_service(node_repository=node_repo, election_repository=election_repo)
+
+    service.delete_node("abcdef12-3456-7890-abcd-ef1234567890", user_id="admin-1")
+
+    assert node.active is False
+    assert node.node_name == "Regular-01__del__abcdef12"
+    node_repo.commit.assert_called_once()
+
+
+def test_delete_node_rejects_already_deleted() -> None:
+    node_repo = MagicMock()
+    node = MagicMock()
+    node.id = "node-1"
+    node.active = False
+    node_repo.get_by_id.return_value = node
+
+    election_repo = MagicMock()
+    election_repo.list_by_status.return_value = []
+
+    service = _make_node_service(node_repository=node_repo, election_repository=election_repo)
+
+    with pytest.raises(ValidationError, match="already deleted"):
+        service.delete_node("node-1")
+
+
 def test_record_heartbeat_persists_metadata() -> None:
     node_repo = MagicMock()
     node = MagicMock()

@@ -13,6 +13,7 @@ from app.services.analytics_service import AnalyticsService
 from app.services.auth_service import AuthService
 from app.theme import apply_saved_theme, inject_theme
 from app.websocket.client import WebSocketClient
+from app.websocket.page_session import WebSocketPageSession, safe_ui_update
 
 
 def _stat_color(color: str) -> str:
@@ -51,6 +52,25 @@ def register_dashboard_routes() -> None:
         }
         ui_refs: dict[str, Any] = {}
         ws_client: WebSocketClient | None = None
+        ws_session = WebSocketPageSession()
+
+        def _update_ws_indicator() -> None:
+            ws_badge = ui_refs.get("ws_status")
+            if ws_badge is not None:
+                if state["ws_connected"]:
+                    ws_badge.set_text("Connected")
+                    ws_badge.props("color=positive outline")
+                else:
+                    ws_badge.set_text("Reconnecting")
+                    ws_badge.props("color=warning outline")
+
+            system_items = ui_refs.get("system_items", {})
+            if "websocket" in system_items:
+                ws_item = system_items["websocket"]
+                ws_item["value"].set_text("Connected" if state["ws_connected"] else "Reconnecting")
+                ws_item["badge"].props(
+                    f'color={"positive" if state["ws_connected"] else "warning"} outline'
+                )
 
         def apply_snapshot(data: dict[str, Any]) -> None:
             state["snapshot"] = data
@@ -79,22 +99,7 @@ def register_dashboard_routes() -> None:
                 if label is not None:
                     label.set_text(value)
 
-            ws_badge = ui_refs.get("ws_status")
-            if ws_badge is not None:
-                if state["ws_connected"]:
-                    ws_badge.set_text("Connected")
-                    ws_badge.props("color=positive outline")
-                else:
-                    ws_badge.set_text("Reconnecting")
-                    ws_badge.props("color=warning outline")
-
-            system_items = ui_refs.get("system_items", {})
-            if "websocket" in system_items:
-                ws_item = system_items["websocket"]
-                ws_item["value"].set_text("Connected" if state["ws_connected"] else "Reconnecting")
-                ws_item["badge"].props(
-                    f'color={"positive" if state["ws_connected"] else "warning"} outline'
-                )
+            _update_ws_indicator()
 
             node_table = ui_refs.get("node_table")
             if node_table is not None:
@@ -193,29 +198,29 @@ def register_dashboard_routes() -> None:
         def on_ws_status(payload: dict[str, Any]) -> None:
             if payload.get("channel") == "dashboard":
                 state["ws_connected"] = bool(payload.get("connected"))
-                if state.get("snapshot"):
-                    apply_snapshot(state["snapshot"])
+                _update_ws_indicator()
+                snapshot = state.get("snapshot")
+                if isinstance(snapshot, dict):
+                    apply_snapshot(snapshot)
 
         async def load_initial() -> None:
             if AuthService.has_backend_token():
                 data = await AnalyticsService.get_dashboard()
-                if data:
-                    apply_snapshot(data)
+                if data and ws_session.active:
+                    safe_ui_update(lambda: apply_snapshot(data))
 
         async def connect_websocket() -> None:
             nonlocal ws_client
             if not AuthService.has_backend_token():
                 return
             ws_client = WebSocketClient(channel="dashboard")
-            ws_client.on("dashboard_snapshot", on_ws_snapshot)
-            ws_client.on("vote_counts", on_ws_snapshot)
-            ws_client.on("vote_synced", on_vote_synced)
-            ws_client.on("heartbeat_received", on_heartbeat)
-            ws_client.on("node_status", on_heartbeat)
-            ws_client.on("sync_status", on_sync_status)
-            from app.websocket.bus import event_bus
-
-            event_bus.subscribe("ws_status", on_ws_status)
+            ws_client.on("dashboard_snapshot", ws_session.bind(on_ws_snapshot))
+            ws_client.on("vote_counts", ws_session.bind(on_ws_snapshot))
+            ws_client.on("vote_synced", ws_session.bind(on_vote_synced))
+            ws_client.on("heartbeat_received", ws_session.bind(on_heartbeat))
+            ws_client.on("node_status", ws_session.bind(on_heartbeat))
+            ws_client.on("sync_status", ws_session.bind(on_sync_status))
+            ws_session.subscribe("ws_status", on_ws_status)
             await ws_client.start(AuthService.get_access_token())
 
         with admin_shell("/dashboard") as content:
@@ -304,6 +309,7 @@ def register_dashboard_routes() -> None:
         await connect_websocket()
 
         async def cleanup() -> None:
+            ws_session.deactivate()
             if ws_client is not None:
                 await ws_client.stop()
 

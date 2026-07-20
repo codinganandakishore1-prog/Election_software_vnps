@@ -136,6 +136,20 @@ class ElectionService:
         return success, message, data
 
     @classmethod
+    async def pause_election(cls, election_id: str) -> tuple[bool, str, dict[str, Any] | None]:
+        client = get_website_container().api_client
+        response = await client.post(f"/elections/{election_id}/pause", headers=cls._auth_headers())
+        success, message, data = client.parse_response(response)
+        return success, message, data
+
+    @classmethod
+    async def resume_election(cls, election_id: str) -> tuple[bool, str, dict[str, Any] | None]:
+        client = get_website_container().api_client
+        response = await client.post(f"/elections/{election_id}/resume", headers=cls._auth_headers())
+        success, message, data = client.parse_response(response)
+        return success, message, data
+
+    @classmethod
     async def end_election(cls, election_id: str) -> tuple[bool, str, dict[str, Any] | None]:
         client = get_website_container().api_client
         response = await client.post(f"/elections/{election_id}/end", headers=cls._auth_headers())

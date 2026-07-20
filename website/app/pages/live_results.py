@@ -11,6 +11,7 @@ from app.dependencies.auth import require_auth
 from app.services.analytics_service import AnalyticsService
 from app.theme import apply_saved_theme, inject_theme
 from app.websocket.client import WebSocketClient
+from app.websocket.page_session import WebSocketPageSession, safe_ui_update
 
 ELECTION_TYPES = ("Regular", "House")
 
@@ -33,6 +34,18 @@ def register_live_results_routes() -> None:
         }
         ui_refs: dict[str, Any] = {}
         ws_client: WebSocketClient | None = None
+        ws_session = WebSocketPageSession()
+
+        def _update_ws_indicator() -> None:
+            ws_badge = ui_refs.get("ws_badge")
+            if ws_badge is None:
+                return
+            if state["ws_connected"]:
+                ws_badge.set_text("LIVE")
+                ws_badge.props("color=positive")
+            else:
+                ws_badge.set_text("Reconnecting")
+                ws_badge.props("color=warning")
 
         def _update_header() -> None:
             title = ui_refs.get("title")
@@ -69,13 +82,7 @@ def register_live_results_routes() -> None:
                         scope = house.get("house_name", "House")
                 subtitle.set_text(f"{scope} · {election_status} · {votes:,} votes cast")
 
-            if ws_badge is not None:
-                if state["ws_connected"]:
-                    ws_badge.set_text("LIVE")
-                    ws_badge.props("color=positive")
-                else:
-                    ws_badge.set_text("Reconnecting")
-                    ws_badge.props("color=warning")
+            _update_ws_indicator()
 
         def _render_position_block(position: dict[str, Any]) -> None:
             with ui.element("div").classes("emp-card q-pa-md q-mb-md w-full"):
@@ -202,10 +209,12 @@ def register_live_results_routes() -> None:
         async def refresh_data() -> None:
             regular = await AnalyticsService.get_regular()
             houses = await AnalyticsService.get_houses()
+            if not ws_session.active:
+                return
             state["regular"] = regular or {}
             state["houses"] = houses or {}
-            _sync_house_filter_options()
-            render_results()
+            safe_ui_update(_sync_house_filter_options)
+            safe_ui_update(render_results)
 
         def on_live_update(_payload: dict[str, Any]) -> None:
             ui.timer(0, refresh_data, once=True)
@@ -213,15 +222,13 @@ def register_live_results_routes() -> None:
         def on_ws_status(payload: dict[str, Any]) -> None:
             if payload.get("channel") == "live":
                 state["ws_connected"] = bool(payload.get("connected"))
-                _update_header()
+                _update_ws_indicator()
 
         async def connect_websocket() -> None:
             nonlocal ws_client
             ws_client = WebSocketClient(channel="live")
-            ws_client.on("live_results_update", on_live_update)
-            from app.websocket.bus import event_bus
-
-            event_bus.subscribe("ws_status", on_ws_status)
+            ws_client.on("live_results_update", ws_session.bind(on_live_update))
+            ws_session.subscribe("ws_status", on_ws_status)
             await ws_client.start()
 
         with admin_shell("/live-results") as content:
@@ -265,6 +272,7 @@ def register_live_results_routes() -> None:
         await connect_websocket()
 
         async def cleanup() -> None:
+            ws_session.deactivate()
             if ws_client is not None:
                 await ws_client.stop()
 

@@ -24,12 +24,14 @@ class VotingScreen:
         vote_service: VoteService,
         bg_manager: BackgroundManager,
         next_vote_btn: ctk.CTkButton,
+        mode_state: dict | None = None,
     ) -> None:
         self.root = root
         self.store = store
         self.vote_service = vote_service
         self.bg_manager = bg_manager
         self.next_vote_btn = next_vote_btn
+        self.mode_state = mode_state if mode_state is not None else {"mode": "dark"}
         self.ballot_frame: ctk.CTkFrame | None = None
         self.current_post_index = 0
 
@@ -50,6 +52,37 @@ class VotingScreen:
         self.ballot_frame.place(relx=0.5, rely=0.5, anchor="center")
         self._render_current_ballot_post()
 
+    def _is_light_mode(self) -> bool:
+        # Prefer the tray toggle state; fall back to CustomTkinter appearance.
+        app_mode = str(self.mode_state.get("mode") or "").strip().lower()
+        if app_mode in {"light", "dark"}:
+            return app_mode == "light"
+        return ctk.get_appearance_mode().strip().lower() == "light"
+
+    def _ballot_palette(self) -> dict[str, str]:
+        """Colors that stay readable on light and dark voting cards."""
+        if self._is_light_mode():
+            # Always use dark text in light mode (theme font_color is usually white).
+            return {
+                "primary": "#111827",
+                "secondary": "#374151",
+                "card_fg": "#f3f4f6",
+                "card_border": "#9ca3af",
+                "placeholder_bg": "#e5e7eb",
+                "placeholder_text": "#374151",
+                "dot_idle": "#9ca3af",
+            }
+        stored = str(self.store.data.get("font_color") or "#FFFFFF").strip() or "#FFFFFF"
+        return {
+            "primary": stored,
+            "secondary": "#9ca3af",
+            "card_fg": "#2b2b2b",
+            "card_border": "#3a3a3a",
+            "placeholder_bg": "#1f1f1f",
+            "placeholder_text": "#9ca3af",
+            "dot_idle": "#4a1515",
+        }
+
     def _render_current_ballot_post(self) -> None:
         if self.ballot_frame is None:
             return
@@ -69,7 +102,7 @@ class VotingScreen:
         target_post = positions[self.current_post_index]
         selected_font = app_data.get("font_family", "Arial")
         selected_size = app_data.get("text_size", 16)
-        selected_color = app_data.get("font_color", "#FFFFFF")
+        colors = self._ballot_palette()
         custom_spacing = app_data.get("image_spacing", 20)
         custom_img_size = app_data.get("image_size", 140)
         border_thickness = 2 if app_data.get("show_image_borders", True) else 0
@@ -78,7 +111,7 @@ class VotingScreen:
             self.ballot_frame,
             text=f"VOTE FOR YOUR: {target_post.upper()}",
             font=(selected_font, int(selected_size * 1.5), "bold"),
-            text_color=selected_color,
+            text_color=colors["primary"],
         )
         header.pack(pady=30)
 
@@ -99,8 +132,9 @@ class VotingScreen:
                 cards_container,
                 width=card_width,
                 height=card_height,
+                fg_color=colors["card_fg"],
                 border_width=border_thickness,
-                border_color="#3a3a3a",
+                border_color=colors["card_border"],
             )
             card.pack(side="left", padx=custom_spacing, pady=10)
             card.pack_propagate(False)
@@ -131,7 +165,8 @@ class VotingScreen:
                         text="[ Image Error ]",
                         width=custom_img_size,
                         height=custom_img_size,
-                        fg_color="#2b2b2b",
+                        fg_color=colors["placeholder_bg"],
+                        text_color=colors["placeholder_text"],
                     )
             else:
                 img_label = ctk.CTkLabel(
@@ -139,7 +174,8 @@ class VotingScreen:
                     text="[ No Image ]",
                     width=custom_img_size,
                     height=custom_img_size,
-                    fg_color="#2b2b2b",
+                    fg_color=colors["placeholder_bg"],
+                    text_color=colors["placeholder_text"],
                 )
             img_label.pack(pady=15)
 
@@ -147,7 +183,7 @@ class VotingScreen:
                 card,
                 text=cand.get("name", "Unknown"),
                 font=(selected_font, selected_size, "bold"),
-                text_color=selected_color,
+                text_color=colors["primary"],
                 wraplength=card_width - 20,
             )
             name_label.pack(pady=2)
@@ -160,7 +196,7 @@ class VotingScreen:
                 card,
                 text=class_text,
                 font=(selected_font, int(selected_size * 0.8)),
-                text_color="#888888",
+                text_color=colors["secondary"],
             )
             metadata_label.pack(pady=2)
 
@@ -169,7 +205,7 @@ class VotingScreen:
                 text="",
                 width=18,
                 height=18,
-                fg_color="#4a1515",
+                fg_color=colors["dot_idle"],
                 corner_radius=9,
             )
             indicator_dot.pack(pady=5)
@@ -180,6 +216,7 @@ class VotingScreen:
                 font=(selected_font, int(selected_size * 0.9), "bold"),
                 fg_color="#1e5228",
                 hover_color="#153b1d",
+                text_color="#FFFFFF",
                 command=lambda c=cand, dot=indicator_dot: self._record_vote_action(c, dot),
             ).pack(pady=15, side="bottom")
 

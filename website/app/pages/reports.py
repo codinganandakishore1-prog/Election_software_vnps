@@ -13,11 +13,11 @@ from app.services.election_service import ElectionService
 from app.services.report_service import ReportService
 from app.theme import apply_saved_theme, inject_theme
 
-REPORT_FORMATS = {
-    "Excel": "Excel (.xlsx)",
-    "CSV": "CSV (.csv)",
-    "PDF": "PDF (.pdf)",
-}
+REPORT_FORMATS = (
+    ("Excel", "Excel (.xlsx)"),
+    ("CSV", "CSV (.csv)"),
+    ("PDF", "PDF (.pdf)"),
+)
 ROLE_CAN_GENERATE = {"Administrator", "Super Administrator"}
 
 
@@ -34,15 +34,21 @@ def register_reports_routes() -> None:
         inject_theme()
         apply_saved_theme()
 
-        state: dict[str, Any] = {"election_id": "", "reports": []}
-        list_container = ui.column().classes("w-full q-gutter-sm")
+        state: dict[str, Any] = {
+            "election_id": "",
+            "elections": [],
+            "reports": [],
+            "format": "Excel",
+        }
 
         with admin_shell("/reports") as content:
             with content:
                 with ui.row().classes("items-center justify-between q-mb-lg w-full"):
                     with ui.column().classes("gap-0"):
                         ui.label("Reports").classes("emp-page-title")
-                        ui.label("Generate and download official election reports.").classes("emp-page-subtitle")
+                        ui.label("Generate and download official election reports.").classes(
+                            "emp-page-subtitle"
+                        )
 
                 if not AuthService.has_backend_token():
                     ui.label(
@@ -50,19 +56,54 @@ def register_reports_routes() -> None:
                         "to generate reports."
                     ).classes("text-warning text-caption q-mb-md")
 
-                with ui.row().classes("w-full q-col-gutter-md q-mb-md items-end"):
-                    election_select = ui.select(label="Election", options=[], with_input=True).props(
-                        "outlined dense"
-                    ).classes("col-12 col-md-4")
-                    format_select = ui.select(label="Format", options=REPORT_FORMATS, value="Excel").props(
-                        "outlined dense"
-                    ).classes("col-12 col-md-3")
-                    if _can_generate():
-                        ui.button("Generate Report", icon="description", on_click=lambda: ui.run(generate_report())).props(
-                            "unelevated color=primary"
-                        ).classes("col-12 col-md-3")
+                ui.label("Election").classes("text-caption text-grey-7 q-mb-xs")
+                election_buttons = ui.row().classes("w-full q-gutter-sm q-mb-md flex-wrap")
 
-                list_container
+                ui.label("Format").classes("text-caption text-grey-7 q-mb-xs")
+                format_buttons = ui.row().classes("w-full q-gutter-sm q-mb-md flex-wrap")
+
+                generate_slot = ui.row().classes("w-full q-mb-md")
+                list_container = ui.column().classes("w-full q-gutter-sm")
+
+                def render_election_buttons() -> None:
+                    election_buttons.clear()
+                    with election_buttons:
+                        if not state["elections"]:
+                            ui.label("No elections available.").classes("text-caption text-grey-6")
+                            return
+                        for election in state["elections"]:
+                            election_id = election["id"]
+                            label = election.get("name") or election.get("election_name", "Election")
+                            status = election.get("status", "")
+                            button_label = f"{label} ({status})" if status else label
+                            is_selected = election_id == state["election_id"]
+                            props = "unelevated color=primary" if is_selected else "outline color=primary"
+
+                            def _make_handler(eid: str = election_id):
+                                async def _handler() -> None:
+                                    if state["election_id"] == eid:
+                                        return
+                                    await select_election(eid)
+
+                                return _handler
+
+                            ui.button(button_label, on_click=_make_handler()).props(props)
+
+                def render_format_buttons() -> None:
+                    format_buttons.clear()
+                    with format_buttons:
+                        for value, label in REPORT_FORMATS:
+                            is_selected = value == state["format"]
+                            props = "unelevated color=primary" if is_selected else "outline color=primary"
+
+                            def _make_handler(selected: str = value):
+                                def _handler() -> None:
+                                    state["format"] = selected
+                                    render_format_buttons()
+
+                                return _handler
+
+                            ui.button(label, on_click=_make_handler()).props(props)
 
                 def render_reports() -> None:
                     list_container.clear()
@@ -70,42 +111,76 @@ def register_reports_routes() -> None:
                         if not state["reports"]:
                             with ui.element("div").classes("emp-placeholder w-full"):
                                 ui.icon("description", size="xl").classes("text-grey-5 q-mb-md")
-                                ui.label("No reports generated yet").classes("text-h6 text-weight-medium")
-                                ui.label("Generate a report to download Excel, CSV, or PDF exports.").classes(
-                                    "text-caption text-grey-6"
+                                ui.label("No reports generated yet").classes(
+                                    "text-h6 text-weight-medium"
                                 )
+                                ui.label(
+                                    "Generate a report to download Excel, CSV, or PDF exports."
+                                ).classes("text-caption text-grey-6")
                             return
 
                         for report in state["reports"]:
-                            with ui.card().classes("w-full"):
-                                with ui.row().classes("items-center justify-between w-full"):
-                                    with ui.column().classes("gap-0"):
-                                        ui.label(report.get("report_name", "Report")).classes("text-subtitle1")
+                            with ui.element("div").classes("emp-card q-pa-md w-full"):
+                                with ui.row().classes("items-center justify-between w-full q-gutter-sm"):
+                                    with ui.column().classes("gap-0 col-grow"):
+                                        ui.label(report.get("report_name", "Report")).classes(
+                                            "text-subtitle1"
+                                        )
                                         ui.label(
                                             f'{report.get("report_type", "—")} · '
                                             f'{report.get("generated_at", "—")}'
                                         ).classes("text-caption text-grey-7")
                                         if report.get("generated_by_name"):
-                                            ui.label(f'By {report["generated_by_name"]}').classes("text-caption")
-                                    ui.button(
-                                        "Download",
-                                        icon="download",
-                                        on_click=lambda r=report: ui.run(download_report(r)),
-                                    ).props("outline")
+                                            ui.label(f'By {report["generated_by_name"]}').classes(
+                                                "text-caption"
+                                            )
+
+                                    with ui.row().classes("items-center q-gutter-sm no-wrap"):
+                                        def _make_download(selected: dict[str, Any] = report):
+                                            async def _handler() -> None:
+                                                await download_report(selected)
+
+                                            return _handler
+
+                                        ui.button(
+                                            "Download",
+                                            icon="download",
+                                            on_click=_make_download(),
+                                        ).props("outline")
+
+                                        if _can_generate():
+                                            def _make_delete(selected: dict[str, Any] = report):
+                                                async def _handler() -> None:
+                                                    await delete_report(selected)
+
+                                                return _handler
+
+                                            ui.button(
+                                                "Delete",
+                                                icon="delete",
+                                                on_click=_make_delete(),
+                                            ).props("outline color=negative")
+
+                async def select_election(election_id: str) -> None:
+                    state["election_id"] = election_id
+                    render_election_buttons()
+                    await refresh_reports()
 
                 async def load_elections() -> None:
                     success, message, elections = await ElectionService.list_elections()
                     if not success:
                         ui.notify(message or "Could not load elections", type="negative")
+                        render_election_buttons()
+                        render_format_buttons()
                         return
-                    options = {
-                        election["id"]: election.get("name", election.get("election_name", "Election"))
-                        for election in elections
-                    }
-                    election_select.options = options
-                    if options and not state["election_id"]:
-                        state["election_id"] = next(iter(options))
-                        election_select.value = state["election_id"]
+                    state["elections"] = elections
+                    if elections and (
+                        not state["election_id"]
+                        or state["election_id"] not in {e["id"] for e in elections}
+                    ):
+                        state["election_id"] = elections[0]["id"]
+                    render_election_buttons()
+                    render_format_buttons()
                     await refresh_reports()
 
                 async def refresh_reports() -> None:
@@ -120,22 +195,10 @@ def register_reports_routes() -> None:
                             ui.notify(message, type="negative")
                     render_reports()
 
-                async def generate_report() -> None:
-                    if not state["election_id"]:
-                        ui.notify("Select an election first", type="warning")
-                        return
-                    success, message, _ = await ReportService.generate_report(
-                        state["election_id"],
-                        format_select.value or "Excel",
-                    )
-                    if success:
-                        ui.notify("Report generated", type="positive")
-                        await refresh_reports()
-                    else:
-                        ui.notify(message or "Report generation failed", type="negative")
-
                 async def download_report(report: dict[str, Any]) -> None:
-                    success, message, content, content_type = await ReportService.download_report(report["id"])
+                    success, message, content, content_type = await ReportService.download_report(
+                        report["id"]
+                    )
                     if not success or content is None:
                         ui.notify(message or "Download failed", type="negative")
                         return
@@ -145,11 +208,48 @@ def register_reports_routes() -> None:
                         "PDF": ".pdf",
                     }.get(report.get("report_type", ""), ".bin")
                     filename = f'{report.get("report_name", "report")}{extension}'
-                    ui.download(content, filename, media_type=content_type or "application/octet-stream")
+                    ui.download(
+                        content,
+                        filename,
+                        media_type=content_type or "application/octet-stream",
+                    )
 
-                async def on_election_change() -> None:
-                    state["election_id"] = election_select.value or ""
+                async def delete_report(report: dict[str, Any]) -> None:
+                    report_id = report.get("id")
+                    if not report_id:
+                        ui.notify("Report id missing", type="negative")
+                        return
+                    success, message = await ReportService.delete_report(report_id)
+                    if success:
+                        ui.notify("Report deleted", type="positive")
+                        await refresh_reports()
+                    else:
+                        ui.notify(message or "Delete failed", type="negative")
+
+                async def generate_report() -> None:
+                    if not state["election_id"]:
+                        ui.notify("Select an election first", type="warning")
+                        return
+                    success, message, report = await ReportService.generate_report(
+                        state["election_id"],
+                        state["format"] or "Excel",
+                    )
+                    if not success:
+                        ui.notify(message or "Report generation failed", type="negative")
+                        return
+
+                    ui.notify("Report generated", type="positive")
                     await refresh_reports()
+                    if isinstance(report, dict) and report.get("id"):
+                        await download_report(report)
 
-                election_select.on("update:model-value", lambda: ui.run(on_election_change()))
+                if _can_generate():
+                    with generate_slot:
+                        ui.button(
+                            "Generate Report",
+                            icon="description",
+                            on_click=generate_report,
+                        ).props("unelevated color=primary")
+
+                render_format_buttons()
                 ui.timer(0.1, load_elections, once=True)

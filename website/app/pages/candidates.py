@@ -87,21 +87,23 @@ def register_candidates_routes() -> None:
                         "to manage candidates."
                     ).classes("text-warning text-caption q-mb-md")
 
+                with ui.column().classes("w-full q-mb-md"):
+                    ui.label("Election").classes("text-caption text-grey-7")
+                    selected_election_label = ui.label("Loading elections…").classes(
+                        "text-subtitle1 text-weight-medium q-mb-sm"
+                    ).style("color: var(--emp-text);")
+                    election_chips = ui.row().classes("w-full flex-wrap q-gutter-sm items-center")
+
                 with ui.row().classes("w-full q-col-gutter-md q-mb-md items-end"):
-                    election_select = ui.select(
-                        label="Election",
-                        options={},
-                        with_input=True,
-                    ).props("outlined dense emit-value map-options").classes("col-12 col-md-3")
                     type_tabs = ui.toggle(list(ELECTION_TYPES), value=state["election_type"]).props(
                         "outline toggle-color=primary"
                     ).classes("col-12 col-md-2")
                     search_input = ui.input("Search", placeholder="Search by name").props(
                         "outlined dense clearable"
-                    ).classes("col-12 col-md-3")
+                    ).classes("col-12 col-md-4")
                     sort_select = ui.select(label="Sort", options=SORT_OPTIONS, value="name_asc").props(
                         "outlined dense"
-                    ).classes("col-12 col-md-2")
+                    ).classes("col-12 col-md-3")
 
                 list_container = ui.column().classes("w-full q-gutter-sm")
                 editing_id: dict[str, str | None] = {"value": None}
@@ -428,23 +430,32 @@ def register_candidates_routes() -> None:
                             return
 
                         for candidate in filtered:
-                            with ui.card().classes("w-full"):
+                            name = (
+                                candidate.get("candidate_name")
+                                or candidate.get("name")
+                                or "Unnamed candidate"
+                            )
+                            with ui.card().classes("w-full emp-card"):
                                 with ui.row().classes("items-center justify-between w-full"):
                                     with ui.column().classes("gap-0"):
-                                        ui.label(candidate.get("candidate_name", "—")).classes("text-subtitle1")
+                                        ui.label(name).classes("text-subtitle1 text-weight-medium").style(
+                                            "color: var(--emp-text);"
+                                        )
                                         class_text = candidate.get("candidate_class") or "—"
                                         section_text = candidate.get("candidate_section") or "—"
                                         ui.label(
                                             f'{candidate.get("position_name", "—")} · '
                                             f'Class {class_text}-{section_text} · '
                                             f'{candidate.get("election_type", "—")}'
-                                        ).classes("text-caption text-grey-7")
+                                        ).classes("text-caption").style("color: var(--emp-text-muted);")
                                         if candidate.get("house_name"):
-                                            ui.label(candidate["house_name"]).classes("text-caption")
+                                            ui.label(candidate["house_name"]).classes("text-caption").style(
+                                                "color: var(--emp-text-muted);"
+                                            )
                                         photo_status = "Photo ready" if candidate.get("has_image") else "No photo"
                                         ui.label(
                                             f'Status: {candidate.get("status", "—")} · {photo_status}'
-                                        ).classes("text-caption")
+                                        ).classes("text-caption").style("color: var(--emp-text-muted);")
                                     with ui.row().classes("q-gutter-sm"):
                                         if _can_edit():
                                             ui.button(
@@ -459,23 +470,57 @@ def register_candidates_routes() -> None:
                                                 ),
                                             ).props("flat round")
 
+                def render_election_chips() -> None:
+                    election_chips.clear()
+                    options = state.get("election_options") or {}
+                    with election_chips:
+                        if not options:
+                            ui.label("No elections available").classes("text-caption text-grey-6")
+                            return
+                        for election_id, election_name in options.items():
+                            selected = election_id == state["election_id"]
+                            props = "unelevated color=primary dense no-caps" if selected else "outline dense no-caps"
+
+                            def _make_handler(eid: str = election_id, ename: str = election_name):
+                                async def _handler() -> None:
+                                    await select_election(eid, ename)
+
+                                return _handler
+
+                            ui.button(election_name, on_click=_make_handler()).props(props)
+
+                async def select_election(election_id: str, election_name: str | None = None) -> None:
+                    if not election_id:
+                        return
+                    options = state.get("election_options") or {}
+                    name = election_name or options.get(election_id) or election_id
+                    state["election_id"] = election_id
+                    selected_election_label.set_text(f"Selected: {name}")
+                    render_election_chips()
+                    await refresh_data()
+
                 async def load_elections() -> None:
                     success, message, elections = await ElectionService.list_elections()
                     if not success:
                         ui.notify(message or "Could not load elections", type="negative")
+                        selected_election_label.set_text("Could not load elections")
                         return
                     options = {
                         election["id"]: election.get("name", election.get("election_name", "Election"))
                         for election in elections
                     }
                     state["election_options"] = options
-                    election_select.options = options
-                    if options and not state["election_id"]:
+                    if not options:
+                        state["election_id"] = ""
+                        selected_election_label.set_text("No elections found")
+                        render_election_chips()
+                        state["candidates"] = []
+                        render_candidates()
+                        return
+                    if state["election_id"] not in options:
                         state["election_id"] = next(iter(options))
-                        election_select.value = state["election_id"]
-                    election_select.update()
+                    await select_election(state["election_id"], options[state["election_id"]])
                     await load_houses()
-                    await refresh_data()
 
                 async def load_houses() -> None:
                     success, message, houses = await HouseService.list_houses()
@@ -837,10 +882,6 @@ def register_candidates_routes() -> None:
                     photo_hint.text = "Photo loaded in the editor — adjust, then Apply Crop & Save."
                     editor_dialog.open()
 
-                async def on_election_change() -> None:
-                    state["election_id"] = election_select.value or ""
-                    await refresh_data()
-
                 async def on_filters_change() -> None:
                     state["election_type"] = type_tabs.value or "Regular"
                     state["search"] = search_input.value or ""
@@ -853,8 +894,7 @@ def register_candidates_routes() -> None:
                 form_section.on("update:model-value", lambda: _update_ballot_labels())
                 form_position.on("update:model-value", lambda: _update_ballot_labels())
                 form_house.on("update:model-value", lambda: _update_ballot_labels())
-                election_select.on("update:model-value", lambda: ui.timer(0, on_election_change, once=True))
-                type_tabs.on("update:model-value", lambda: ui.timer(0, on_filters_change, once=True))
+                type_tabs.on_value_change(lambda _e: ui.timer(0, on_filters_change, once=True))
                 search_input.on(
                     "update:model-value",
                     lambda: (state.update({"search": search_input.value or ""}), render_candidates()),

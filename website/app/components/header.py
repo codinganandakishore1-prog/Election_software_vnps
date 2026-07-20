@@ -109,17 +109,18 @@ def create_header(drawer: ui.left_drawer) -> None:
 
         ui.timer(0.1, load_notifications, once=True)
 
+        from app.theme import set_dark_mode
+
+        theme_btn = ui.button(
+            icon="light_mode" if AuthService.is_dark_mode() else "dark_mode",
+        ).props("flat round dense").tooltip("Toggle dark mode")
+
         def toggle_theme() -> None:
             dark = AuthService.toggle_dark_mode()
-            if dark:
-                ui.dark_mode().enable()
-            else:
-                ui.dark_mode().disable()
+            set_dark_mode(dark)
+            theme_btn.props(f'icon={"light_mode" if dark else "dark_mode"}')
 
-        ui.button(
-            icon="dark_mode" if not AuthService.is_dark_mode() else "light_mode",
-            on_click=toggle_theme,
-        ).props("flat round dense").tooltip("Toggle dark mode")
+        theme_btn.on_click(toggle_theme)
 
         with ui.button().props("flat round dense"):
             ui.icon("account_circle")

@@ -140,8 +140,12 @@ class ElectionService(BaseService):
     def delete_election(self, election_id: str, *, user_id: str | None = None) -> None:
         election = self._get_election_or_raise(election_id)
 
-        if election.status in {ElectionStatus.PUBLISHED, ElectionStatus.LIVE, ElectionStatus.COMPLETED}:
-            raise ValidationError(f"Cannot delete election while status is {election.status.value}")
+        # Live / paused / published elections must be ended (or stay published) first.
+        if election.status in {ElectionStatus.PUBLISHED, ElectionStatus.LIVE, ElectionStatus.PAUSED}:
+            raise ValidationError(
+                f"Cannot delete election while status is {election.status.value}. "
+                "End voting first (or keep it as Draft to delete earlier)."
+            )
 
         self.election_repository.soft_delete(election)
         self._audit(user_id, "Election Deleted", {"election_id": election_id})
@@ -201,7 +205,7 @@ class ElectionService(BaseService):
     def lock_election(self, election_id: str, *, user_id: str | None = None) -> ElectionLockResponse:
         election = self._get_election_or_raise(election_id)
 
-        if election.status in {ElectionStatus.LIVE, ElectionStatus.ARCHIVED}:
+        if election.status in {ElectionStatus.LIVE, ElectionStatus.PAUSED, ElectionStatus.ARCHIVED}:
             raise ValidationError(f"Cannot lock election with status {election.status.value}")
 
         if election.configuration_locked:
@@ -226,8 +230,8 @@ class ElectionService(BaseService):
     def unlock_election(self, election_id: str, *, user_id: str | None = None) -> ElectionLockResponse:
         election = self._get_election_or_raise(election_id)
 
-        if election.status == ElectionStatus.LIVE:
-            raise ElectionLockedError("Cannot unlock configuration while the election is live")
+        if election.status in {ElectionStatus.LIVE, ElectionStatus.PAUSED}:
+            raise ElectionLockedError("Cannot unlock configuration while the election is live or paused")
 
         if election.status == ElectionStatus.ARCHIVED:
             raise ValidationError("Cannot unlock an archived election")
@@ -335,8 +339,14 @@ class ElectionService(BaseService):
     def start_election(self, election_id: str, *, user_id: str | None = None) -> ElectionDetailResponse:
         election = self._get_election_or_raise(election_id)
 
+        # Already live — treat as success so a stale UI / double-click doesn't error.
+        if election.status == ElectionStatus.LIVE:
+            return self._to_detail(election)
+
         if election.status != ElectionStatus.PUBLISHED:
-            raise ValidationError("Only published elections can be started")
+            raise ValidationError(
+                f"Only published elections can be started (current status: {election.status.value})"
+            )
 
         if election.version < 1:
             raise ValidationError("Election must be published before starting")
@@ -347,11 +357,53 @@ class ElectionService(BaseService):
         self.election_repository.commit()
         return self._to_detail(election)
 
+    def pause_election(self, election_id: str, *, user_id: str | None = None) -> ElectionDetailResponse:
+        """Temporarily pause a live election without ending it."""
+        election = self._get_election_or_raise(election_id)
+
+        if election.status == ElectionStatus.PAUSED:
+            return self._to_detail(election)
+
+        if election.status != ElectionStatus.LIVE:
+            raise ValidationError(
+                f"Only live elections can be paused (current status: {election.status.value})"
+            )
+
+        election.status = ElectionStatus.PAUSED
+        election.configuration_locked = True
+        self._audit(user_id, "Election Paused", {"election_id": election.id})
+        self.election_repository.commit()
+        return self._to_detail(election)
+
+    def resume_election(self, election_id: str, *, user_id: str | None = None) -> ElectionDetailResponse:
+        """Resume voting after a pause."""
+        election = self._get_election_or_raise(election_id)
+
+        if election.status == ElectionStatus.LIVE:
+            return self._to_detail(election)
+
+        if election.status != ElectionStatus.PAUSED:
+            raise ValidationError(
+                f"Only paused elections can be resumed (current status: {election.status.value})"
+            )
+
+        election.status = ElectionStatus.LIVE
+        election.configuration_locked = True
+        self._audit(user_id, "Election Resumed", {"election_id": election.id})
+        self.election_repository.commit()
+        return self._to_detail(election)
+
     def end_election(self, election_id: str, *, user_id: str | None = None) -> ElectionDetailResponse:
         election = self._get_election_or_raise(election_id)
 
-        if election.status != ElectionStatus.LIVE:
-            raise ValidationError("Only live elections can be ended")
+        # Already ended — treat as success so a stale Live badge / double-click doesn't error.
+        if election.status == ElectionStatus.COMPLETED:
+            return self._to_detail(election)
+
+        if election.status not in {ElectionStatus.LIVE, ElectionStatus.PAUSED}:
+            raise ValidationError(
+                f"Only live or paused elections can be ended (current status: {election.status.value})"
+            )
 
         election.status = ElectionStatus.COMPLETED
         election.configuration_locked = True
@@ -365,6 +417,7 @@ class ElectionService(BaseService):
             return False
         return election.configuration_locked or election.status in {
             ElectionStatus.LIVE,
+            ElectionStatus.PAUSED,
             ElectionStatus.COMPLETED,
             ElectionStatus.ARCHIVED,
         }
@@ -476,8 +529,8 @@ class ElectionService(BaseService):
         return election
 
     def _ensure_metadata_editable(self, election: Election) -> None:
-        if election.status == ElectionStatus.LIVE:
-            raise ElectionLockedError("Cannot modify election while it is live")
+        if election.status in {ElectionStatus.LIVE, ElectionStatus.PAUSED}:
+            raise ElectionLockedError("Cannot modify election while it is live or paused")
         if election.status == ElectionStatus.ARCHIVED:
             raise ValidationError("Cannot modify an archived election")
 

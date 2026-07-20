@@ -89,7 +89,7 @@ class AnalyticsService(BaseService):
             else self.vote_repository.count_all()
         )
 
-        nodes = self.node_repository.list_all_ordered()
+        nodes = [node for node in self.node_repository.list_all_ordered() if node.active]
         node_rows: list[NodeHealthEntry] = []
         online_nodes = 0
         pending_queue = 0
@@ -159,7 +159,7 @@ class AnalyticsService(BaseService):
             node_statistics=node_statistics,
             leading_candidates=leading_candidates,
             votes_per_minute=self._build_votes_per_minute(election.id),
-            timeline=self._build_timeline(election_id=election.id, interval="minute", window=30),
+            timeline=self._build_timeline(election_id=election.id, interval="hour", window=48),
         )
 
     def get_regular_analytics(self, election_id: str | None = None) -> RegularAnalyticsSnapshot:
@@ -267,7 +267,7 @@ class AnalyticsService(BaseService):
 
     def _build_summary(self, report_data) -> AnalyticsSummary:
         summary = report_data.summary
-        nodes = self.node_repository.list_all_ordered()
+        nodes = [node for node in self.node_repository.list_all_ordered() if node.active]
         online_nodes = sum(
             1 for node in nodes if self.node_service.get_node_health(node.id).status == "Online"
         )

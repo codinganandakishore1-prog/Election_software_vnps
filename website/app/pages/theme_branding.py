@@ -15,18 +15,44 @@ from app.theme import apply_saved_theme, inject_theme
 
 ROLE_CAN_EDIT = {"Administrator", "Super Administrator"}
 
+# Curated fonts for Theme & Branding (not every font on earth — editable list).
+# Google Fonts entries are loaded in website/app/theme/styles.py.
 FONT_OPTIONS = [
+    # Sans-serif
     "Inter",
     "Roboto",
     "Open Sans",
-    "Oswald",
-    "Montserrat",
-    "Playfair Display",
-    "Merriweather",
     "Lato",
     "Poppins",
+    "Montserrat",
+    "Nunito",
+    "Source Sans 3",
+    "Raleway",
+    "Work Sans",
+    "Nunito Sans",
+    "DM Sans",
+    "Outfit",
+    "Plus Jakarta Sans",
+    # Display / headings
+    "Oswald",
+    "Bebas Neue",
+    "Anton",
+    "Archivo Black",
+    # Serif
+    "Playfair Display",
+    "Merriweather",
+    "Lora",
+    "Libre Baskerville",
+    "Cormorant Garamond",
+    "PT Serif",
+    # System / classic
+    "Arial",
+    "Georgia",
     "Times New Roman",
+    "Verdana",
+    "Trebuchet MS",
 ]
+
 
 COLOR_FIELDS = [
     ("primary_color", "Primary"),
@@ -285,30 +311,80 @@ def register_theme_routes() -> None:
 
                         ui.button("Save Colors", icon="palette", on_click=save_colors).props("unelevated color=primary")
 
+                def render_font_picker(label: str, initial: str) -> dict[str, Any]:
+                    """Show each font name in its own typeface for easier selection."""
+                    current = initial if initial in FONT_OPTIONS else FONT_OPTIONS[0]
+                    choice: dict[str, Any] = {"value": current}
+
+                    with ui.column().classes("w-full q-mb-md emp-font-picker"):
+                        ui.label(label).classes("text-caption text-weight-medium text-grey-8")
+                        preview = (
+                            ui.label(current)
+                            .classes("emp-font-preview q-mb-sm")
+                            .style(f"font-family: '{current}', sans-serif; font-size: 1.35rem; font-weight: 600;")
+                        )
+                        with ui.scroll_area().classes("w-full emp-font-list").style(
+                            "height: 240px; border: 1px solid var(--emp-border); "
+                            "border-radius: 10px; background: var(--emp-surface);"
+                        ):
+                            with ui.column().classes("w-full q-pa-xs"):
+                                for font in FONT_OPTIONS:
+
+                                    def _make_handler(font_name: str = font) -> Any:
+                                        def _select() -> None:
+                                            choice["value"] = font_name
+                                            preview.set_text(font_name)
+                                            preview.style(
+                                                f"font-family: '{font_name}', sans-serif; "
+                                                "font-size: 1.35rem; font-weight: 600;"
+                                            )
+
+                                        return _select
+
+                                    is_selected = font == current
+                                    btn = (
+                                        ui.button(font, on_click=_make_handler())
+                                        .props("flat align=left no-caps dense")
+                                        .classes("w-full justify-start emp-font-option")
+                                        .style(
+                                            f"font-family: '{font}', sans-serif; font-size: 1.15rem; "
+                                            "text-transform: none; min-height: 40px;"
+                                        )
+                                    )
+                                    if is_selected:
+                                        btn.classes("emp-font-option-selected")
+
+                    return choice
+
                 def render_fonts_tab(detail: dict[str, Any]) -> None:
-                    heading_font = ui.select(
-                        options=FONT_OPTIONS,
-                        label="Heading Font",
-                        value=detail.get("font_heading") or "Inter",
-                    ).props("outlined dense").classes("w-full")
-                    body_font = ui.select(
-                        options=FONT_OPTIONS,
-                        label="Body Font",
-                        value=detail.get("font_body") or "Inter",
-                    ).props("outlined dense").classes("w-full")
-                    accent_font = ui.select(
-                        options=FONT_OPTIONS,
-                        label="Accent Font",
-                        value=detail.get("font_accent") or "Playfair Display",
-                    ).props("outlined dense").classes("w-full")
+                    ui.label(
+                        "Each option is shown in its own font so you can compare styles easily."
+                    ).classes("text-caption text-grey-7 q-mb-md")
+
+                    with ui.row().classes("w-full q-col-gutter-md"):
+                        with ui.column().classes("col-12 col-md-4"):
+                            heading_font = render_font_picker(
+                                "Heading Font",
+                                detail.get("font_heading") or "Inter",
+                            )
+                        with ui.column().classes("col-12 col-md-4"):
+                            body_font = render_font_picker(
+                                "Body Font",
+                                detail.get("font_body") or "Inter",
+                            )
+                        with ui.column().classes("col-12 col-md-4"):
+                            accent_font = render_font_picker(
+                                "Accent Font",
+                                detail.get("font_accent") or "Playfair Display",
+                            )
 
                     if _can_edit():
 
                         async def save_fonts() -> None:
                             payload = {
-                                "font_heading": heading_font.value,
-                                "font_body": body_font.value,
-                                "font_accent": accent_font.value,
+                                "font_heading": heading_font["value"],
+                                "font_body": body_font["value"],
+                                "font_accent": accent_font["value"],
                             }
                             success, message, updated = await ThemeService.update_theme(detail["id"], payload)
                             if success:
@@ -317,7 +393,9 @@ def register_theme_routes() -> None:
                             else:
                                 ui.notify(message or "Save failed", type="negative")
 
-                        ui.button("Save Fonts", icon="text_fields", on_click=save_fonts).props("unelevated color=primary")
+                        ui.button("Save Fonts", icon="text_fields", on_click=save_fonts).props(
+                            "unelevated color=primary"
+                        ).classes("q-mt-md")
 
                 def render_asset_section(assets: list[tuple[str, str, str]]) -> None:
                     detail = state.get("detail")

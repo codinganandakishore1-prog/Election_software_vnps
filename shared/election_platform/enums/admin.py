@@ -18,6 +18,8 @@ class NotificationType(str, Enum):
     NODE_ONLINE = "Node Online"
     ELECTION_PUBLISHED = "Election Published"
     ELECTION_STARTED = "Election Started"
+    ELECTION_PAUSED = "Election Paused"
+    ELECTION_RESUMED = "Election Resumed"
     ELECTION_ENDED = "Election Ended"
     BACKUP_COMPLETED = "Backup Completed"
     SYNC_FAILED = "Synchronization Failed"

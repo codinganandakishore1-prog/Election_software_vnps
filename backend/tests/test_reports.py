@@ -261,6 +261,7 @@ def test_generate_report_persists_metadata(tmp_path: Path) -> None:
     assert response.report_type == ReportType.CSV
     assert response.election_name == "Student Council 2026"
     service.report_repository.add.assert_called_once()
+    service.report_repository.commit.assert_called_once()
 
 
 def test_generate_report_rejects_missing_election(tmp_path: Path) -> None:

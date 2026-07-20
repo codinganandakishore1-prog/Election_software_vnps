@@ -209,8 +209,8 @@ class CandidateService(BaseService):
         election = self.election_repository.get_by_id(election_id)
         if election is None or election.deleted_at is not None:
             raise NotFoundError("Election not found")
-        if election.status == ElectionStatus.LIVE:
-            raise ElectionLockedError("Cannot modify candidates while the election is live")
+        if election.status in {ElectionStatus.LIVE, ElectionStatus.PAUSED}:
+            raise ElectionLockedError("Cannot modify candidates while the election is live or paused")
         if election.configuration_locked is True:
             raise ElectionLockedError("Election configuration is locked")
 

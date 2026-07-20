@@ -16,6 +16,7 @@ class ElectionStatus(str, Enum):
     DRAFT = "Draft"
     PUBLISHED = "Published"
     LIVE = "Live"
+    PAUSED = "Paused"
     COMPLETED = "Completed"
     ARCHIVED = "Archived"
 

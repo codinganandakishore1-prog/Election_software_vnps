@@ -44,7 +44,7 @@ HOUSE_ROWS = (
     {
         "id": "00000000-0000-4000-8000-000000000102",
         "house_name": "Pandya",
-        "color": "#2980B9",
+        "color": "#F1C40F",
         "active": True,
     },
     {
@@ -56,7 +56,7 @@ HOUSE_ROWS = (
     {
         "id": "00000000-0000-4000-8000-000000000104",
         "house_name": "Chola",
-        "color": "#F39C12",
+        "color": "#2980B9",
         "active": True,
     },
 )

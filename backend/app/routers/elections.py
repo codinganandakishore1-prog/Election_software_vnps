@@ -226,15 +226,59 @@ async def start_election(
     election = container.election_service.start_election(election_id, user_id=current_user.id)
     await container.notification_service.create_and_broadcast(
         title="Election started",
-        message=f'"{election.election_name}" is now live.',
+        message=f'"{election.name}" is now live.',
         notification_type=NotificationType.ELECTION_STARTED.value,
     )
     await broadcast_election_status(
         election_id=election.id,
-        election_name=election.election_name,
+        election_name=election.name,
         status=ElectionStatus.LIVE.value,
     )
     return APIResponse.ok(message="Election started successfully", data=election)
+
+
+@router.post("/{election_id}/pause")
+async def pause_election(
+    election_id: str,
+    current_user: CurrentUser,
+    container: ServiceContainer,
+    _: None = AdminUser,
+) -> APIResponse[ElectionDetailResponse]:
+    """Pause a live election without ending it."""
+    election = container.election_service.pause_election(election_id, user_id=current_user.id)
+    await container.notification_service.create_and_broadcast(
+        title="Election paused",
+        message=f'"{election.name}" voting is paused.',
+        notification_type=NotificationType.ELECTION_PAUSED.value,
+    )
+    await broadcast_election_status(
+        election_id=election.id,
+        election_name=election.name,
+        status=ElectionStatus.PAUSED.value,
+    )
+    return APIResponse.ok(message="Election paused successfully", data=election)
+
+
+@router.post("/{election_id}/resume")
+async def resume_election(
+    election_id: str,
+    current_user: CurrentUser,
+    container: ServiceContainer,
+    _: None = AdminUser,
+) -> APIResponse[ElectionDetailResponse]:
+    """Resume a paused election."""
+    election = container.election_service.resume_election(election_id, user_id=current_user.id)
+    await container.notification_service.create_and_broadcast(
+        title="Election resumed",
+        message=f'"{election.name}" voting is live again.',
+        notification_type=NotificationType.ELECTION_RESUMED.value,
+    )
+    await broadcast_election_status(
+        election_id=election.id,
+        election_name=election.name,
+        status=ElectionStatus.LIVE.value,
+    )
+    return APIResponse.ok(message="Election resumed successfully", data=election)
 
 
 @router.post("/{election_id}/end")
@@ -248,12 +292,12 @@ async def end_election(
     election = container.election_service.end_election(election_id, user_id=current_user.id)
     await container.notification_service.create_and_broadcast(
         title="Election ended",
-        message=f'"{election.election_name}" voting has ended.',
+        message=f'"{election.name}" voting has ended.',
         notification_type=NotificationType.ELECTION_ENDED.value,
     )
     await broadcast_election_status(
         election_id=election.id,
-        election_name=election.election_name,
+        election_name=election.name,
         status=ElectionStatus.COMPLETED.value,
     )
     return APIResponse.ok(message="Election ended successfully", data=election)

@@ -26,7 +26,27 @@ class ConfigService:
         self.store = store
         self.node_authenticator = node_authenticator
 
+    def apply_node_settings(
+        self,
+        *,
+        node_id: str = "",
+        node_secret: str = "",
+        website_url: str = "",
+    ) -> None:
+        """Push Admin → Node Configuration into the live API client / authenticator."""
+        url = (website_url or "").strip().rstrip("/")
+        if url:
+            self.api_client.base_url = url
+        if self.node_authenticator is not None:
+            self.node_authenticator.update_credentials(node_id, node_secret)
+
     def download_election(self, election_id: str, token: str | None = None) -> dict:
+        # Pick up credentials saved after app start (without requiring restart).
+        self.apply_node_settings(
+            node_id=str(self.store.data.get("node_id") or ""),
+            node_secret=str(self.store.data.get("node_secret") or ""),
+            website_url=str(self.store.data.get("website_url") or ""),
+        )
         headers = self._auth_headers(token)
         response = self.api_client.get(
             f"/api/v1/configuration/package?election_id={election_id}",

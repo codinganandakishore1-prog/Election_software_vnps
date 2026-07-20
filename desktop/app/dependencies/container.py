@@ -1,5 +1,8 @@
 """Desktop service container."""
 
+import os
+from pathlib import Path
+
 from app.config.settings import settings
 from app.data.election_store import ElectionStore
 from app.database.init_db import initialize_local_database
@@ -20,13 +23,23 @@ from app.sync.sync_manager import SyncManager
 DESKTOP_ROOT = resource_root()
 
 
+def _resolve_data_dir() -> Path:
+    """Allow multiple node instances via DESKTOP_DATA_DIR."""
+    override = (os.environ.get("DESKTOP_DATA_DIR") or "").strip()
+    if override:
+        path = Path(override).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    return data_root() / "data"
+
+
 class DesktopContainer:
     """Dependency container for the desktop voting application."""
 
     def __init__(self, website_url: str | None = None) -> None:
         initialize_local_database()
 
-        self.store = ElectionStore(base_dir=resource_root(), data_dir=data_root() / "data")
+        self.store = ElectionStore(base_dir=resource_root(), data_dir=_resolve_data_dir())
         resolved_url = website_url or self.store.data.get("website_url") or settings.website_url
         self.api_client = APIClient(base_url=resolved_url)
         self.queue_manager = QueueManager()

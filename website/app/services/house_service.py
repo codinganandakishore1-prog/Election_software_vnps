@@ -113,8 +113,9 @@ class HouseService:
         *,
         election_type: str | None = None,
         house_id: str | None = None,
+        active_only: bool = True,
     ) -> tuple[bool, str, list[dict[str, Any]]]:
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"active_only": active_only}
         if election_type:
             params["election_type"] = election_type
         if house_id:
@@ -125,11 +126,25 @@ class HouseService:
         return success, message, data or []
 
     @classmethod
+    async def create_node(cls, payload: dict[str, Any]) -> tuple[bool, str, dict[str, Any] | None]:
+        client = get_website_container().api_client
+        response = await client.post("/nodes", json=payload, headers=cls._auth_headers())
+        success, message, data = client.parse_response(response)
+        return success, message, data
+
+    @classmethod
     async def update_node(cls, node_id: str, payload: dict[str, Any]) -> tuple[bool, str, dict[str, Any] | None]:
         client = get_website_container().api_client
         response = await client.put(f"/nodes/{node_id}", json=payload, headers=cls._auth_headers())
         success, message, data = client.parse_response(response)
         return success, message, data
+
+    @classmethod
+    async def delete_node(cls, node_id: str) -> tuple[bool, str]:
+        client = get_website_container().api_client
+        response = await client.delete(f"/nodes/{node_id}", headers=cls._auth_headers())
+        success, message, _ = client.parse_response(response)
+        return success, message
 
     @classmethod
     async def list_elections(cls) -> tuple[bool, str, list[dict[str, Any]]]:

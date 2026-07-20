@@ -138,6 +138,7 @@ class ReportService(BaseService):
                 "file_path": str(output_path),
             },
         )
+        self.report_repository.commit()
         return self._to_response(report, election_name=election.election_name)
 
     def get_report(self, report_id: str) -> Report:
@@ -154,6 +155,27 @@ class ReportService(BaseService):
         media_type = self._MEDIA_TYPES[report.report_type]
         filename = file_path.name
         return file_path, media_type, filename
+
+    def delete_report(self, report_id: str, *, user_id: str | None) -> None:
+        report = self.get_report(report_id)
+        file_path = Path(report.file_path)
+        self.report_repository.soft_delete(report)
+        self._audit(
+            user_id,
+            "Delete Report",
+            {
+                "report_id": report.id,
+                "election_id": report.election_id,
+                "report_type": report.report_type.value,
+                "file_path": report.file_path,
+            },
+        )
+        self.report_repository.commit()
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
 
     def record_download(
         self,
@@ -177,6 +199,7 @@ class ReportService(BaseService):
             "Download Report",
             {"report_id": report_id, "ip_address": ip_address},
         )
+        self.report_download_repository.commit()
 
     def build_snapshot(self, election_id: str, *, generated_by: str) -> ReportDataSnapshot:
         """Expose report data for tests and analytics reuse."""

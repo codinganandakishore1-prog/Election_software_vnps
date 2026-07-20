@@ -55,6 +55,7 @@ class NodeService(BaseService):
         *,
         election_type: ElectionType | None = None,
         house_id: str | None = None,
+        active_only: bool = False,
     ) -> list[NodeResponse]:
         nodes = (
             self.node_repository.list_by_election_type(election_type)
@@ -63,6 +64,8 @@ class NodeService(BaseService):
         )
         if house_id is not None:
             nodes = [node for node in nodes if node.house_id == house_id]
+        if active_only:
+            nodes = [node for node in nodes if node.active]
         return [self._to_response(node) for node in nodes]
 
     def get_node(self, node_id: str) -> NodeResponse:
@@ -169,6 +172,33 @@ class NodeService(BaseService):
         )
         self.node_repository.commit()
         return self._to_assignment_response(node)
+
+    def delete_node(self, node_id: str, *, user_id: str | None = None) -> None:
+        """Deactivate a node and free its name so it can be re-registered."""
+        node = self._get_node_or_raise(node_id)
+        self._ensure_nodes_editable()
+
+        if not node.active:
+            raise ValidationError("Node is already deleted")
+
+        original_name = node.node_name
+        node.active = False
+        # Keep within VARCHAR(100) while freeing the unique node_name constraint.
+        suffix = f"__del__{node.id[:8]}"
+        max_base = 100 - len(suffix)
+        node.node_name = f"{original_name[:max_base]}{suffix}"
+
+        self._audit(
+            user_id,
+            "Node Deleted",
+            {
+                "node_id": node.id,
+                "node_name": original_name,
+                "election_type": node.election_type.value,
+                "house_id": node.house_id,
+            },
+        )
+        self.node_repository.commit()
 
     def record_heartbeat(
         self,

@@ -45,13 +45,14 @@ NAV_ITEMS: list[NavItem] = [
     NavItem("House Election", "home", "/house-election"),
     NavItem("Candidates", "groups", "/candidates"),
     NavItem("Positions", "badge", "/positions"),
-    NavItem("Election Management", "ballot", "/elections"),
+    NavItem("Election Management", "event", "/elections"),
     NavItem("Node Monitor", "devices", "/nodes"),
     NavItem("Reports", "description", "/reports"),
     NavItem("Analytics", "bar_chart", "/analytics"),
     NavItem("Audit Logs", "history", "/audit-logs"),
     NavItem("Theme & Branding", "palette", "/theme-branding"),
     NavItem("Settings", "settings", "/settings"),
+    NavItem("Documentation", "help", "/help"),
     NavItem("Profile", "person", "/profile"),
 ]
 

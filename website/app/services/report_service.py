@@ -61,3 +61,10 @@ class ReportService:
             return True, "Download ready", response.content, content_type
         success, message, _ = client.parse_response(response)
         return success, message or "Download failed", None, None
+
+    @classmethod
+    async def delete_report(cls, report_id: str) -> tuple[bool, str]:
+        client = get_website_container().api_client
+        response = await client.delete(f"/reports/{report_id}", headers=cls._auth_headers())
+        success, message, _ = client.parse_response(response)
+        return success, message or ("Report deleted" if success else "Delete failed")

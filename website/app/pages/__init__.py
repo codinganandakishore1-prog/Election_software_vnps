@@ -7,6 +7,7 @@ from app.pages.audit_logs import register_audit_logs_routes
 from app.pages.candidates import register_candidates_routes
 from app.pages.dashboard import register_dashboard_routes
 from app.pages.elections import register_elections_routes
+from app.pages.help import register_help_routes
 from app.pages.house_election import register_house_election_routes
 from app.pages.live_results import register_live_results_routes
 from app.pages.login import register_login_routes
@@ -37,6 +38,7 @@ def register_all_routes() -> None:
     register_theme_routes()
     register_analytics_routes()
     register_audit_logs_routes()
+    register_help_routes()
 
     @ui.page("/")
     def index_redirect() -> None:

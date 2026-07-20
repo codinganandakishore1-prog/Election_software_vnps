@@ -98,11 +98,11 @@ services:
       - key: CORS_ORIGINS
         sync: false
       - key: RATE_LIMIT_REQUESTS
-        value: "120"
+        value: "600"
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: "60"
       - key: LOGIN_RATE_LIMIT_REQUESTS
-        value: "30"
+        value: "60"
 
   - type: web
     name: election-website

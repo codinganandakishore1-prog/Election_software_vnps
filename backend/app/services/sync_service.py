@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from election_platform.enums.admin import SyncLogStatus
-from election_platform.enums.election import ElectionType
+from election_platform.enums.election import ElectionStatus, ElectionType
 from election_platform.enums.sync import QueueStatus
 from election_platform.logging.setup import get_logger
 
@@ -162,6 +162,14 @@ class SyncService(BaseService):
         election = self.election_repository.get_by_id(payload.election_id)
         if election is None or election.deleted_at is not None:
             logger.warning("Vote %s rejected: election %s not found", payload.vote_uuid, payload.election_id)
+            return False
+        if election.status != ElectionStatus.LIVE:
+            logger.warning(
+                "Vote %s rejected: election %s is %s (must be Live)",
+                payload.vote_uuid,
+                payload.election_id,
+                getattr(election.status, "value", election.status),
+            )
             return False
 
         position = self.position_repository.get_by_id(payload.position_id)

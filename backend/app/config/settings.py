@@ -64,10 +64,11 @@ class Settings(BaseAppSettings):
     # Logging
     log_to_file: bool = Field(default=True, alias="LOG_TO_FILE")
 
-    # Security
-    rate_limit_requests: int = Field(default=120, alias="RATE_LIMIT_REQUESTS")
+    # Security — high ceilings so school NAT / website→API traffic don't false-trigger.
+    # Set RATE_LIMIT_REQUESTS=0 to disable. Login stays stricter (brute-force).
+    rate_limit_requests: int = Field(default=600, alias="RATE_LIMIT_REQUESTS")
     rate_limit_window_seconds: int = Field(default=60, alias="RATE_LIMIT_WINDOW_SECONDS")
-    login_rate_limit_requests: int = Field(default=10, alias="LOGIN_RATE_LIMIT_REQUESTS")
+    login_rate_limit_requests: int = Field(default=60, alias="LOGIN_RATE_LIMIT_REQUESTS")
 
     @field_validator("cors_origins", mode="before")
     @classmethod

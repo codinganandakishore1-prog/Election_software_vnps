@@ -226,9 +226,13 @@ backend/logs/
 backend/uploads/
 backend/generated_reports/
 backend/backups/
+backend/config_packages/
 desktop/logs/
 desktop/data/
 *.log
+
+# NiceGUI local session storage (may contain tokens)
+website/.nicegui/
 
 # Legacy root app (preserved reference)
 candidate_images/

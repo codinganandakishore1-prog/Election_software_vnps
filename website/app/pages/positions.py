@@ -31,12 +31,14 @@ def register_positions_routes() -> None:
 
         state: dict[str, Any] = {
             "election_id": "",
+            "elections": [],
             "election_options": {},
             "positions": [],
             "selected_type": "Regular",
             "search": "",
             "status_filter": "all",
         }
+        election_buttons: ui.row
 
         with admin_shell("/positions") as content:
             with content:
@@ -57,26 +59,23 @@ def register_positions_routes() -> None:
                         "to load and save positions."
                     ).classes("text-warning text-caption q-mb-md")
 
-                with ui.row().classes("w-full q-col-gutter-md q-mb-sm items-end"):
-                    election_select = ui.select(
-                        label="Election",
-                        options={},
-                        with_input=True,
-                    ).props("outlined dense emit-value map-options").classes("col-12 col-md-4")
+                ui.label("Election").classes("text-caption text-grey-7 q-mb-xs")
+                election_buttons = ui.row().classes("w-full q-gutter-sm q-mb-md flex-wrap")
 
+                with ui.row().classes("w-full q-col-gutter-md q-mb-sm items-end"):
                     type_tabs = ui.toggle(list(ELECTION_TYPES), value=state["selected_type"]).props(
                         "outline toggle-color=primary"
                     ).classes("col-12 col-md-3")
 
                     search_input = ui.input("Search positions", placeholder="Search by name").props(
                         "outlined dense clearable"
-                    ).classes("col-12 col-md-3")
+                    ).classes("col-12 col-md-5")
 
                     status_filter = ui.select(
                         label="Status",
                         options={"all": "All", "active": "Active", "inactive": "Inactive"},
                         value="all",
-                    ).props("outlined dense").classes("col-12 col-md-2")
+                    ).props("outlined dense").classes("col-12 col-md-4")
 
                 ui.label(
                     "Regular and House run separately: switch the toggle to manage each list. "
@@ -133,32 +132,56 @@ def register_positions_routes() -> None:
                     orders = [int(item.get("display_order") or 0) for item in state["positions"]]
                     return (max(orders) if orders else 0) + 1
 
-                def _apply_election_options(options: dict[str, str]) -> None:
+                def render_election_buttons() -> None:
+                    election_buttons.clear()
+                    with election_buttons:
+                        if not state["elections"]:
+                            ui.label("No elections available.").classes("text-caption text-grey-6")
+                            return
+                        for election in state["elections"]:
+                            election_id = election["id"]
+                            label = election.get("name") or election.get("election_name", "Election")
+                            status = election.get("status", "")
+                            button_label = f"{label} ({status})" if status else label
+                            is_selected = election_id == state["election_id"]
+                            props = "unelevated color=primary" if is_selected else "outline color=primary"
+
+                            def _make_handler(eid: str = election_id):
+                                async def _handler() -> None:
+                                    if state["election_id"] == eid:
+                                        return
+                                    state["election_id"] = eid
+                                    render_election_buttons()
+                                    await refresh_positions()
+
+                                return _handler
+
+                            ui.button(button_label, on_click=_make_handler()).props(props)
+
+                def _apply_election_options(elections: list[dict[str, Any]]) -> None:
+                    state["elections"] = elections
+                    options = {
+                        item["id"]: item.get("name") or item.get("election_name") or item["id"]
+                        for item in elections
+                    }
                     state["election_options"] = options
-                    election_select.options = options
                     if options:
                         if state["election_id"] not in options:
                             state["election_id"] = next(iter(options))
-                        election_select.value = state["election_id"]
                     else:
                         state["election_id"] = ""
-                        election_select.value = None
-                    election_select.update()
+                    render_election_buttons()
 
                 async def load_elections() -> None:
                     success, message, elections = await PositionService.list_elections()
                     if not success:
                         ui.notify(message or "Could not load elections", type="warning")
-                        _apply_election_options({})
+                        _apply_election_options([])
                         render_positions()
                         return
 
-                    options = {
-                        item["id"]: item.get("name") or item.get("election_name") or item["id"]
-                        for item in elections
-                    }
-                    _apply_election_options(options)
-                    if not options:
+                    _apply_election_options(elections)
+                    if not elections:
                         ui.notify(
                             "No elections yet. Create one under Election Management first.",
                             type="warning",
@@ -389,10 +412,6 @@ def register_positions_routes() -> None:
                         form_error.text = message or "Could not save position"
                         form_error.visible = True
 
-                async def on_election_change() -> None:
-                    state["election_id"] = election_select.value or ""
-                    await refresh_positions()
-
                 async def on_filters_change() -> None:
                     previous_type = state["selected_type"]
                     state["selected_type"] = type_tabs.value or "Regular"
@@ -403,7 +422,6 @@ def register_positions_routes() -> None:
                     else:
                         render_positions()
 
-                election_select.on("update:model-value", lambda: ui.timer(0, on_election_change, once=True))
                 type_tabs.on("update:model-value", lambda: ui.timer(0, on_filters_change, once=True))
                 search_input.on("update:model-value", lambda: ui.timer(0, on_filters_change, once=True))
                 status_filter.on("update:model-value", lambda: ui.timer(0, on_filters_change, once=True))

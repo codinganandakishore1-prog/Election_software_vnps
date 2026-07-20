@@ -24,7 +24,12 @@ class DesktopApp:
         ctk.set_appearance_mode(self.mode_state["mode"])
 
         self.root = ctk.CTk()
-        self.root.title("Node - Election App")
+        node_label = (
+            self.container.store.data.get("node_name")
+            or self.container.store.data.get("node_id")
+            or "Node"
+        )
+        self.root.title(f"{node_label} - Election App")
 
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -44,6 +49,7 @@ class DesktopApp:
             vote_service=self.container.vote_service,
             bg_manager=self.bg_manager,
             next_vote_btn=self.next_vote_btn,
+            mode_state=self.mode_state,
         )
         self.next_vote_btn.configure(command=self.voting_screen.start_session)
 
@@ -89,6 +95,9 @@ class DesktopApp:
         if self.theme_btn is not None:
             self.theme_btn.configure(text=self._theme_button_label())
         self.bg_manager.refresh_auto()
+        # Re-draw open ballot so light/dark text colors update immediately.
+        if self.voting_screen.ballot_frame is not None:
+            self.voting_screen._render_current_ballot_post()
 
     def _build_utility_tray(self) -> None:
         utility_tray = ctk.CTkFrame(self.root, fg_color="transparent")

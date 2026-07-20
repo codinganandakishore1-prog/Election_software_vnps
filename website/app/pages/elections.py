@@ -17,6 +17,7 @@ STATUS_COLORS = {
     "Draft": "grey",
     "Published": "info",
     "Live": "positive",
+    "Paused": "orange",
     "Completed": "warning",
     "Archived": "negative",
 }
@@ -76,6 +77,7 @@ def register_elections_routes() -> None:
                             "Draft": "Draft",
                             "Published": "Published",
                             "Live": "Live",
+                            "Paused": "Paused",
                             "Completed": "Completed",
                             "Archived": "Archived",
                         },
@@ -206,6 +208,9 @@ def register_elections_routes() -> None:
                                     ui.label(f"Status: {status} · Version {detail.get('version', 0)}").classes(
                                         "text-caption text-grey-7"
                                     )
+                                    ui.label(f"Election ID: {election_id}").classes(
+                                        "text-caption text-grey-6"
+                                    ).style("font-family: monospace; user-select: all;")
                                 ui.badge(status).props(f"color={_status_badge(status)}")
 
                             if detail.get("description"):
@@ -243,7 +248,7 @@ def register_elections_routes() -> None:
                                         ui.button("Lock", icon="lock", on_click=lambda: run_lock(election_id)).props(
                                             "outline"
                                         )
-                                    if locked and status not in {"Live", "Archived"}:
+                                    if locked and status not in {"Live", "Paused", "Archived"}:
                                         ui.button(
                                             "Unlock",
                                             icon="lock_open",
@@ -262,9 +267,25 @@ def register_elections_routes() -> None:
                                         ).props("unelevated color=positive")
                                     if status == "Live":
                                         ui.button(
+                                            "Pause Voting",
+                                            icon="pause",
+                                            on_click=lambda: run_pause(election_id),
+                                        ).props("unelevated color=warning")
+                                        ui.button(
                                             "End Voting",
                                             icon="stop",
-                                            on_click=lambda: run_end(election_id),
+                                            on_click=lambda: confirm_end_election(election_id, detail.get("name", "")),
+                                        ).props("unelevated color=negative")
+                                    if status == "Paused":
+                                        ui.button(
+                                            "Resume Voting",
+                                            icon="play_arrow",
+                                            on_click=lambda: run_resume(election_id),
+                                        ).props("unelevated color=positive")
+                                        ui.button(
+                                            "End Voting",
+                                            icon="stop",
+                                            on_click=lambda: confirm_end_election(election_id, detail.get("name", "")),
                                         ).props("unelevated color=negative")
                                     if status in {"Completed", "Published"}:
                                         ui.button(
@@ -272,11 +293,13 @@ def register_elections_routes() -> None:
                                             icon="archive",
                                             on_click=lambda: run_archive(election_id),
                                         ).props("outline")
-                                    if status == "Draft":
+                                    if status in {"Draft", "Completed", "Archived"}:
                                         ui.button(
                                             "Delete",
                                             icon="delete",
-                                            on_click=lambda: run_delete(election_id),
+                                            on_click=lambda: confirm_delete_election(
+                                                election_id, detail.get("name", ""), status
+                                            ),
                                         ).props("outline color=negative")
 
                         validation = state.get("validation")
@@ -406,31 +429,121 @@ def register_elections_routes() -> None:
                         await load_elections()
 
                 async def run_start(election_id: str) -> None:
-                    success, message, _ = await ElectionService.start_election(election_id)
-                    ui.notify(
-                        message or ("Started" if success else "Start failed"),
-                        type="positive" if success else "negative",
-                    )
+                    success, message, data = await ElectionService.start_election(election_id)
                     if success:
-                        await load_elections()
+                        status = (data or {}).get("status", "Live")
+                        ui.notify(
+                            message or (f"Election is {status}" if status == "Live" else "Started"),
+                            type="positive",
+                        )
+                    else:
+                        ui.notify(message or "Start failed", type="negative")
+                    # Always refresh so a stale Published badge can't hide Live status.
+                    await load_elections()
+
+                async def run_pause(election_id: str) -> None:
+                    success, message, data = await ElectionService.pause_election(election_id)
+                    if success:
+                        status = (data or {}).get("status", "Paused")
+                        ui.notify(message or f"Election is {status}", type="warning")
+                    else:
+                        ui.notify(message or "Pause failed", type="negative")
+                    await load_elections()
+
+                async def run_resume(election_id: str) -> None:
+                    success, message, data = await ElectionService.resume_election(election_id)
+                    if success:
+                        status = (data or {}).get("status", "Live")
+                        ui.notify(message or f"Election is {status}", type="positive")
+                    else:
+                        ui.notify(message or "Resume failed", type="negative")
+                    await load_elections()
+
+                def confirm_end_election(election_id: str, election_name: str) -> None:
+                    """Ask for explicit confirmation before permanently ending voting."""
+                    name = (election_name or "").strip() or "this election"
+                    with ui.dialog() as confirm_dialog, ui.card().classes("q-pa-md").style("min-width: 420px"):
+                        ui.label("End voting?").classes("text-h6 q-mb-sm")
+                        ui.label(
+                            f'You are about to permanently end voting for "{name}".'
+                        ).classes("text-body2 q-mb-sm")
+                        ui.label(
+                            "This cannot be undone from Pause/Resume. "
+                            "After ending, the election status becomes Completed."
+                        ).classes("text-caption text-grey-7 q-mb-md")
+                        with ui.row().classes("justify-end q-gutter-sm w-full"):
+                            ui.button("Cancel", on_click=confirm_dialog.close).props("flat")
+                            ui.button(
+                                "Yes, End Voting",
+                                icon="stop",
+                                on_click=lambda: ui.timer(
+                                    0,
+                                    lambda: _confirm_and_end(election_id, confirm_dialog),
+                                    once=True,
+                                ),
+                            ).props("unelevated color=negative")
+                    confirm_dialog.open()
+
+                async def _confirm_and_end(election_id: str, confirm_dialog) -> None:
+                    confirm_dialog.close()
+                    await run_end(election_id)
 
                 async def run_end(election_id: str) -> None:
-                    success, message, _ = await ElectionService.end_election(election_id)
-                    ui.notify(
-                        message or ("Ended" if success else "End failed"),
-                        type="positive" if success else "negative",
-                    )
+                    success, message, data = await ElectionService.end_election(election_id)
                     if success:
-                        await load_elections()
+                        status = (data or {}).get("status", "Completed")
+                        election_name = (data or {}).get("name") or "Election"
+                        ui.notify(
+                            message
+                            or f'"{election_name}" has ended. Status is now {status}.',
+                            type="positive",
+                        )
+                    else:
+                        ui.notify(message or "End failed", type="negative")
+                    # Always refresh so a stale Live badge can't hide Completed status.
+                    await load_elections()
 
-                async def run_delete(election_id: str) -> None:
+                def confirm_delete_election(
+                    election_id: str,
+                    election_name: str,
+                    status: str = "Draft",
+                ) -> None:
+                    """Ask for explicit confirmation before deleting an election."""
+                    name = (election_name or "").strip() or "this election"
+                    with ui.dialog() as confirm_dialog, ui.card().classes("q-pa-md").style("min-width: 420px"):
+                        ui.label("Delete election?").classes("text-h6 q-mb-sm")
+                        ui.label(
+                            f'You are about to permanently delete "{name}" ({status}).'
+                        ).classes("text-body2 q-mb-sm")
+                        ui.label(
+                            "This cannot be undone. Live or paused elections must be ended first."
+                        ).classes("text-caption text-grey-7 q-mb-md")
+                        with ui.row().classes("justify-end q-gutter-sm w-full"):
+                            ui.button("Cancel", on_click=confirm_dialog.close).props("flat")
+                            ui.button(
+                                "Yes, Delete",
+                                icon="delete",
+                                on_click=lambda: ui.timer(
+                                    0,
+                                    lambda: _confirm_and_delete(election_id, name, confirm_dialog),
+                                    once=True,
+                                ),
+                            ).props("unelevated color=negative")
+                    confirm_dialog.open()
+
+                async def _confirm_and_delete(election_id: str, election_name: str, confirm_dialog) -> None:
+                    confirm_dialog.close()
+                    await run_delete(election_id, election_name)
+
+                async def run_delete(election_id: str, election_name: str = "") -> None:
                     success, message = await ElectionService.delete_election(election_id)
                     if not success:
                         ui.notify(message or "Delete failed", type="negative")
                         return
                     state["selected_id"] = ""
                     state["detail"] = None
-                    ui.notify("Election deleted", type="positive")
+                    name = (election_name or "").strip() or "Election"
+                    ui.notify(f'"{name}" has been deleted.', type="positive")
                     await load_elections()
 
                 def on_search_change() -> None:

@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.database.base import utc_now
 from app.models.sync import Vote
@@ -66,36 +66,36 @@ class VoteRepository(BaseRepository[Vote]):
         )
         return [(row[0], int(row[1])) for row in self.db.execute(stmt).all()]
 
+    def _time_bucket(self, column: ColumnElement, *, granularity: str) -> ColumnElement:
+        """Dialect-safe minute/hour truncation for SQLite and MySQL."""
+        bind = self.db.get_bind()
+        dialect = bind.dialect.name if bind is not None else "sqlite"
+        if dialect == "sqlite":
+            fmt = "%Y-%m-%d %H:%M:00" if granularity == "minute" else "%Y-%m-%d %H:00:00"
+            return func.strftime(fmt, column)
+        # MySQL / MariaDB
+        fmt = "%Y-%m-%d %H:%i:00" if granularity == "minute" else "%Y-%m-%d %H:00:00"
+        return func.date_format(column, fmt)
+
+    @staticmethod
+    def _parse_bucket_label(label: object, *, granularity: str) -> datetime | None:
+        pattern = "%Y-%m-%d %H:%M:00" if granularity == "minute" else "%Y-%m-%d %H:00:00"
+        try:
+            return datetime.strptime(str(label), pattern).replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
     def count_votes_per_minute(
         self,
         *,
         minutes: int = 30,
         election_id: str | None = None,
     ) -> list[tuple[datetime, int]]:
-        cutoff = utc_now() - timedelta(minutes=minutes)
-        conditions = [Vote.synced_at >= cutoff]
-        if election_id is not None:
-            conditions.append(Vote.election_id == election_id)
-        stmt = (
-            select(
-                func.date_format(Vote.synced_at, "%Y-%m-%d %H:%i:00"),
-                func.count(),
-            )
-            .where(*conditions)
-            .group_by(func.date_format(Vote.synced_at, "%Y-%m-%d %H:%i:00"))
-            .order_by(func.date_format(Vote.synced_at, "%Y-%m-%d %H:%i:00"))
+        return self._count_votes_by_bucket(
+            granularity="minute",
+            cutoff=utc_now() - timedelta(minutes=minutes),
+            election_id=election_id,
         )
-        rows = self.db.execute(stmt).all()
-        parsed: list[tuple[datetime, int]] = []
-        for minute_label, count in rows:
-            try:
-                minute_dt = datetime.strptime(str(minute_label), "%Y-%m-%d %H:%i:00").replace(
-                    tzinfo=timezone.utc
-                )
-            except ValueError:
-                continue
-            parsed.append((minute_dt, int(count)))
-        return parsed
 
     def count_votes_per_hour(
         self,
@@ -103,30 +103,39 @@ class VoteRepository(BaseRepository[Vote]):
         hours: int = 24,
         election_id: str | None = None,
     ) -> list[tuple[datetime, int]]:
-        cutoff = utc_now() - timedelta(hours=hours)
-        conditions = [Vote.synced_at >= cutoff]
-        if election_id is not None:
-            conditions.append(Vote.election_id == election_id)
-        stmt = (
-            select(
-                func.date_format(Vote.synced_at, "%Y-%m-%d %H:00:00"),
-                func.count(),
-            )
-            .where(*conditions)
-            .group_by(func.date_format(Vote.synced_at, "%Y-%m-%d %H:00:00"))
-            .order_by(func.date_format(Vote.synced_at, "%Y-%m-%d %H:00:00"))
+        return self._count_votes_by_bucket(
+            granularity="hour",
+            cutoff=utc_now() - timedelta(hours=hours),
+            election_id=election_id,
         )
-        rows = self.db.execute(stmt).all()
-        parsed: list[tuple[datetime, int]] = []
-        for hour_label, count in rows:
-            try:
-                hour_dt = datetime.strptime(str(hour_label), "%Y-%m-%d %H:00:00").replace(
-                    tzinfo=timezone.utc
-                )
-            except ValueError:
-                continue
-            parsed.append((hour_dt, int(count)))
-        return parsed
+
+    def _count_votes_by_bucket(
+        self,
+        *,
+        granularity: str,
+        cutoff: datetime,
+        election_id: str | None,
+    ) -> list[tuple[datetime, int]]:
+        # Prefer synced_at; fall back to voted_at when sync timestamps are sparse.
+        for column in (Vote.synced_at, Vote.voted_at):
+            conditions = [column >= cutoff]
+            if election_id is not None:
+                conditions.append(Vote.election_id == election_id)
+            bucket = self._time_bucket(column, granularity=granularity)
+            stmt = (
+                select(bucket, func.count())
+                .where(*conditions)
+                .group_by(bucket)
+                .order_by(bucket)
+            )
+            parsed: list[tuple[datetime, int]] = []
+            for label, count in self.db.execute(stmt).all():
+                parsed_dt = self._parse_bucket_label(label, granularity=granularity)
+                if parsed_dt is not None:
+                    parsed.append((parsed_dt, int(count)))
+            if parsed:
+                return parsed
+        return []
 
     def get_node_vote_window(
         self,

@@ -75,12 +75,17 @@ class WebSocketClient:
             except asyncio.CancelledError:
                 break
             except Exception as exc:
+                if not self._running:
+                    break
                 logger.warning("WebSocket disconnected (%s): %s", self.channel, exc)
                 event_bus.publish("ws_status", {"connected": False, "channel": self.channel})
                 await asyncio.sleep(delay)
+                if not self._running:
+                    break
                 delay = min(delay * 2, 30.0)
 
-        event_bus.publish("ws_status", {"connected": False, "channel": self.channel})
+        if self._running:
+            event_bus.publish("ws_status", {"connected": False, "channel": self.channel})
 
     async def _handle_message(self, raw: str) -> None:
         try:

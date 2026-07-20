@@ -96,3 +96,15 @@ async def download_report(
         media_type=media_type,
         filename=filename,
     )
+
+
+@router.delete("/{report_id}")
+async def delete_report(
+    report_id: str,
+    current_user: CurrentUser,
+    container: ServiceContainer,
+    _: None = AdminUser,
+) -> APIResponse[None]:
+    """Soft-delete a generated report and remove its file."""
+    container.report_service.delete_report(report_id, user_id=current_user.id)
+    return APIResponse.ok(message="Report deleted successfully")

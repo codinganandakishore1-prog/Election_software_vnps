@@ -29,6 +29,15 @@ class NodeAuthenticator:
     def has_credentials(self) -> bool:
         return bool(self.node_id and self.node_secret)
 
+    def update_credentials(self, node_id: str, node_secret: str) -> None:
+        """Apply credentials saved from Admin → Node Configuration."""
+        node_id = (node_id or "").strip()
+        node_secret = (node_secret or "").strip()
+        if node_id != self.node_id or node_secret != self.node_secret:
+            self.node_id = node_id
+            self.node_secret = node_secret
+            self.invalidate()
+
     def auth_headers(self) -> dict[str, str]:
         """Return bearer authorization headers, logging in when required."""
         if not self.has_credentials:

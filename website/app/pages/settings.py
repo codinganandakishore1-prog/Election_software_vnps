@@ -65,7 +65,7 @@ def register_settings_routes() -> None:
                             ui.button(
                                 "Save Website Settings",
                                 icon="save",
-                                on_click=lambda: ui.run(save_website_settings()),
+                                on_click=lambda: ui.timer(0, save_website_settings, once=True),
                             ).props("unelevated color=primary q-mt-md")
 
                     with ui.tab_panel("Database"):
@@ -87,12 +87,12 @@ def register_settings_routes() -> None:
                                 ui.button(
                                     "Test Connection",
                                     icon="cable",
-                                    on_click=lambda: ui.run(test_database_connection()),
+                                    on_click=lambda: ui.timer(0, test_database_connection, once=True),
                                 ).props("outline")
                                 ui.button(
                                     "Save Database Settings",
                                     icon="save",
-                                    on_click=lambda: ui.run(save_database_settings()),
+                                    on_click=lambda: ui.timer(0, save_database_settings, once=True),
                                 ).props("unelevated color=primary")
 
                 async def load_settings() -> None:

@@ -36,6 +36,7 @@ def register_house_election_routes() -> None:
 
         state: dict[str, Any] = {
             "election_id": "",
+            "elections": [],
             "houses": [],
             "configuration": None,
             "candidates": [],
@@ -43,6 +44,7 @@ def register_house_election_routes() -> None:
             "selected_house_id": "",
             "validation": None,
         }
+        election_buttons: ui.row
 
         with admin_shell("/house-election") as content:
             with content:
@@ -59,12 +61,8 @@ def register_house_election_routes() -> None:
                         "to load and save house configuration."
                     ).classes("text-warning text-caption q-mb-md")
 
-                with ui.row().classes("w-full q-col-gutter-md q-mb-md items-end"):
-                    election_select = ui.select(
-                        label="Election",
-                        options={},
-                        with_input=True,
-                    ).props("outlined dense emit-value map-options").classes("col-12 col-md-4")
+                ui.label("Election").classes("text-caption text-grey-7 q-mb-xs")
+                election_buttons = ui.row().classes("w-full q-gutter-sm q-mb-md flex-wrap")
 
                 tabs = ui.tabs().classes("w-full")
                 with tabs:
@@ -124,34 +122,55 @@ def register_house_election_routes() -> None:
                 node_error = ui.label("").classes("text-negative text-caption")
                 node_error.visible = False
                 node_name_input = ui.input("Node Name").props("outlined dense").classes("w-full")
-                node_type_select = ui.select(
-                    options=["Regular", "House"],
-                    label="Election Type",
-                ).props("outlined dense").classes("w-full")
                 node_house_select = ui.select(options={}, label="Assigned House").props(
                     "outlined dense emit-value map-options"
                 ).classes("w-full")
                 editing_node_id: dict[str, str | None] = {"value": None}
 
+                def render_election_buttons() -> None:
+                    election_buttons.clear()
+                    with election_buttons:
+                        if not state["elections"]:
+                            ui.label("No elections available.").classes("text-caption text-grey-6")
+                            return
+                        for election in state["elections"]:
+                            election_id = election["id"]
+                            label = election.get("election_name") or election.get("name", "Election")
+                            status = election.get("status", "")
+                            button_label = f"{label} ({status})" if status else label
+                            is_selected = election_id == state["election_id"]
+                            props = "unelevated color=primary" if is_selected else "outline color=primary"
+
+                            def _make_handler(eid: str = election_id):
+                                async def _handler() -> None:
+                                    if state["election_id"] == eid:
+                                        return
+                                    state["election_id"] = eid
+                                    state["validation"] = None
+                                    render_election_buttons()
+                                    await refresh_all()
+                                    render_validation()
+
+                                return _handler
+
+                            ui.button(button_label, on_click=_make_handler()).props(props)
+
                 async def load_elections() -> None:
                     success, message, elections = await HouseService.list_elections()
                     if not success:
                         ui.notify(message or "Could not load elections", type="warning")
+                        state["elections"] = []
+                        render_election_buttons()
                         render_houses()
                         return
 
-                    options = {
-                        item["id"]: item.get("election_name") or item.get("name") or item["id"]
-                        for item in elections
-                    }
-                    election_select.options = options
-                    if options and not state["election_id"]:
-                        state["election_id"] = next(iter(options))
-                        election_select.value = state["election_id"]
-                    elif not options:
-                        election_select.value = None
+                    state["elections"] = elections
+                    valid_ids = {item["id"] for item in elections}
+                    if not elections:
                         state["election_id"] = ""
-                    election_select.update()
+                    elif state["election_id"] not in valid_ids:
+                        state["election_id"] = elections[0]["id"]
+                    render_election_buttons()
                     await refresh_all()
 
                 async def refresh_houses() -> None:
@@ -159,12 +178,20 @@ def register_house_election_routes() -> None:
                     if success:
                         state["houses"] = houses
                         house_options = {house["id"]: house["house_name"] for house in houses}
-                        candidate_house_select.options = house_options
-                        node_house_select.options = house_options
+                        candidate_house_select.set_options(
+                            house_options,
+                            value=candidate_house_select.value
+                            if candidate_house_select.value in house_options
+                            else next(iter(house_options), None),
+                        )
+                        node_house_select.set_options(
+                            house_options,
+                            value=node_house_select.value
+                            if node_house_select.value in house_options
+                            else next(iter(house_options), None),
+                        )
                         if house_options and not state["selected_house_id"]:
                             state["selected_house_id"] = next(iter(house_options))
-                        candidate_house_select.update()
-                        node_house_select.update()
                     else:
                         ui.notify(message or "Could not load houses", type="negative")
                     render_houses()
@@ -198,7 +225,7 @@ def register_house_election_routes() -> None:
                     render_candidates()
 
                 async def refresh_nodes() -> None:
-                    success, message, nodes = await HouseService.list_nodes()
+                    success, message, nodes = await HouseService.list_nodes(election_type="House")
                     if success:
                         state["nodes"] = nodes
                     else:
@@ -350,25 +377,76 @@ def register_house_election_routes() -> None:
 
                 def render_nodes() -> None:
                     nodes_panel.clear()
-                    house_nodes = [node for node in state["nodes"] if node.get("election_type") == "House"]
-                    regular_nodes = [node for node in state["nodes"] if node.get("election_type") == "Regular"]
+                    house_nodes = [
+                        node for node in state["nodes"] if node.get("election_type") == "House"
+                    ]
+                    house_options = {
+                        house["id"]: house["house_name"] for house in state["houses"]
+                    }
+                    if house_options:
+                        node_house_select.set_options(house_options, value=node_house_select.value)
+
+                    filtered = house_nodes
+                    if state["selected_house_id"]:
+                        filtered = [
+                            node
+                            for node in house_nodes
+                            if node.get("house_id") == state["selected_house_id"]
+                        ]
 
                     with nodes_panel:
                         ui.label(
-                            "House assignment is configured here. Teachers and students never choose the house."
+                            "Register house voting machines here. Switch houses below to view and assign "
+                            "nodes for Pallava, Pandya, Chera, and Chola. Regular election nodes are managed "
+                            "under Regular Election."
                         ).classes("text-body2 text-grey-7 q-mb-md")
 
-                        if house_nodes:
-                            ui.label("House Nodes").classes("text-subtitle1 text-weight-medium q-mb-sm")
-                            for node in house_nodes:
+                        with ui.row().classes("w-full items-center q-gutter-sm q-mb-md flex-wrap"):
+                            def _select_house(house_id: str) -> None:
+                                state["selected_house_id"] = house_id
+                                render_nodes()
+
+                            all_props = "unelevated" if not state["selected_house_id"] else "outline"
+                            ui.button(
+                                "All Houses",
+                                on_click=lambda: _select_house(""),
+                            ).props(f"{all_props} dense").classes("q-mb-xs")
+
+                            for house in state["houses"]:
+                                house_id = house["id"]
+                                is_active = state["selected_house_id"] == house_id
+                                props = "unelevated" if is_active else "outline"
+                                ui.button(
+                                    house.get("house_name", "House"),
+                                    on_click=lambda hid=house_id: _select_house(hid),
+                                ).props(f"{props} dense color=primary").classes("q-mb-xs")
+
+                            ui.space()
+                            if _can_edit():
+                                ui.button(
+                                    "Register Node",
+                                    icon="add",
+                                    color="primary",
+                                    on_click=open_create_node_dialog,
+                                ).props("unelevated")
+
+                        if filtered:
+                            for node in filtered:
                                 _render_node_card(node)
                         else:
-                            ui.label("No house nodes registered.").classes("text-caption text-grey-6 q-mb-md")
-
-                        if regular_nodes:
-                            ui.label("Regular Nodes").classes("text-subtitle1 text-weight-medium q-mt-md q-mb-sm")
-                            for node in regular_nodes:
-                                _render_node_card(node)
+                            with ui.element("div").classes("emp-placeholder w-full"):
+                                ui.icon("computer", size="xl").classes("text-grey-5 q-mb-md")
+                                selected_name = house_options.get(state["selected_house_id"], "")
+                                empty_label = (
+                                    f"No voting nodes for {selected_name} yet."
+                                    if selected_name
+                                    else "No house voting nodes assigned yet."
+                                )
+                                ui.label(empty_label).classes("text-h6 text-weight-medium")
+                                if selected_name and _can_edit():
+                                    ui.label(
+                                        f'Click "Register Node" to add a machine for {selected_name}.'
+                                    ).classes("text-caption text-grey-6")
 
                 def _render_node_card(node: dict[str, Any]) -> None:
                     with ui.element("div").classes("emp-card q-pa-md w-full q-mb-sm"):
@@ -380,10 +458,15 @@ def register_house_election_routes() -> None:
                                     f'{node.get("election_type", "")} · {house_label}'
                                 ).classes("text-caption text-grey-7")
                             if _can_edit():
-                                ui.button(
-                                    icon="edit",
-                                    on_click=lambda n=node: open_edit_node_dialog(n),
-                                ).props("flat round dense color=primary")
+                                with ui.row().classes("q-gutter-xs"):
+                                    ui.button(
+                                        icon="edit",
+                                        on_click=lambda n=node: open_edit_node_dialog(n),
+                                    ).props("flat round dense color=primary")
+                                    ui.button(
+                                        icon="delete",
+                                        on_click=lambda n=node: delete_node(n),
+                                    ).props("flat round dense color=negative")
 
                 def render_validation() -> None:
                     validation_panel.clear()
@@ -510,35 +593,112 @@ def register_house_election_routes() -> None:
                     else:
                         ui.notify(message or "Could not delete candidate", type="negative")
 
+                def open_create_node_dialog() -> None:
+                    editing_node_id["value"] = None
+                    node_dialog_title.text = "Register House Node"
+                    node_error.visible = False
+                    node_name_input.value = ""
+                    house_options = {
+                        house["id"]: house["house_name"] for house in state["houses"]
+                    }
+                    default_house = state["selected_house_id"] or next(iter(house_options), None)
+                    node_house_select.set_options(house_options, value=default_house)
+                    node_dialog.open()
+
                 def open_edit_node_dialog(node: dict[str, Any]) -> None:
                     editing_node_id["value"] = node["id"]
+                    node_dialog_title.text = "Edit House Node"
                     node_error.visible = False
                     node_name_input.value = node.get("node_name", "")
-                    node_type_select.value = node.get("election_type", "House")
-                    node_house_select.value = node.get("house_id")
+                    house_options = {
+                        house["id"]: house["house_name"] for house in state["houses"]
+                    }
+                    node_house_select.set_options(
+                        house_options,
+                        value=node.get("house_id") or next(iter(house_options), None),
+                    )
                     node_dialog.open()
+
+                async def delete_node(node: dict[str, Any]) -> None:
+                    with ui.dialog() as confirm_dialog, ui.card().classes("q-pa-md"):
+                        ui.label("Delete Node?").classes("text-h6")
+                        ui.label(
+                            f'Remove "{node.get("node_name", "")}"? '
+                            "It will be deactivated and can no longer sync votes."
+                        ).classes("text-body2 q-mt-sm")
+                        with ui.row().classes("q-mt-md justify-end q-gutter-sm"):
+                            ui.button("Cancel", on_click=confirm_dialog.close).props("flat")
+                            ui.button(
+                                "Delete",
+                                color="negative",
+                                on_click=lambda: confirm_dialog.submit("delete"),
+                            ).props("unelevated")
+
+                    result = await confirm_dialog
+                    if result != "delete":
+                        return
+
+                    success, message = await HouseService.delete_node(node["id"])
+                    if success:
+                        ui.notify("Node deleted", type="positive")
+                        await refresh_nodes()
+                    else:
+                        ui.notify(message or "Could not delete node", type="negative")
+
+                def show_node_credentials(registration: dict[str, Any]) -> None:
+                    node_id_value.set_text(registration.get("id") or "")
+                    node_secret_value.set_text(registration.get("node_secret") or "")
+                    credentials_dialog.open()
+
+                async def copy_text(label: str, value: str) -> None:
+                    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+                    await ui.run_javascript(f"navigator.clipboard.writeText('{escaped}')")
+                    ui.notify(f"{label} copied", type="positive")
+
+                async def copy_node_id() -> None:
+                    await copy_text("Node ID", node_id_value.text or "")
+
+                async def copy_node_secret() -> None:
+                    await copy_text("Node Secret", node_secret_value.text or "")
 
                 async def save_node() -> None:
                     node_error.visible = False
-                    if not editing_node_id["value"]:
+                    name = (node_name_input.value or "").strip()
+                    if not name:
+                        node_error.text = "Node name is required."
+                        node_error.visible = True
+                        return
+                    if not node_house_select.value:
+                        node_error.text = "Assigned house is required for House nodes."
+                        node_error.visible = True
                         return
 
                     payload: dict[str, Any] = {
-                        "node_name": (node_name_input.value or "").strip(),
-                        "election_type": node_type_select.value,
+                        "node_name": name,
+                        "election_type": "House",
+                        "house_id": node_house_select.value,
                     }
-                    if node_type_select.value == "House":
-                        payload["house_id"] = node_house_select.value
-                    else:
-                        payload["house_id"] = None
 
-                    success, message, _ = await HouseService.update_node(editing_node_id["value"], payload)
-                    if success:
+                    if editing_node_id["value"]:
+                        success, message, _ = await HouseService.update_node(editing_node_id["value"], payload)
+                        if success:
+                            node_dialog.close()
+                            ui.notify("Node assignment saved", type="positive")
+                            await refresh_nodes()
+                        else:
+                            node_error.text = message or "Could not save node assignment"
+                            node_error.visible = True
+                        return
+
+                    payload["active"] = True
+                    success, message, registration = await HouseService.create_node(payload)
+                    if success and registration:
                         node_dialog.close()
-                        ui.notify("Node assignment saved", type="positive")
+                        ui.notify("Node registered", type="positive")
                         await refresh_nodes()
+                        show_node_credentials(registration)
                     else:
-                        node_error.text = message or "Could not save node assignment"
+                        node_error.text = message or "Could not register node"
                         node_error.visible = True
 
                 async def run_validation() -> None:
@@ -570,9 +730,8 @@ def register_house_election_routes() -> None:
                         ).props("unelevated")
 
                 with node_dialog, ui.card().classes("q-pa-md").style("min-width: 420px") as house_node_card:
-                    ui.label("Node Assignment").classes("text-h6 q-mb-md")
+                    node_dialog_title = ui.label("Register House Node").classes("text-h6 q-mb-md")
                     node_name_input.move(house_node_card)
-                    node_type_select.move(house_node_card)
                     node_house_select.move(house_node_card)
                     node_error.move(house_node_card)
                     with ui.row().classes("q-mt-md justify-end q-gutter-sm"):
@@ -583,15 +742,38 @@ def register_house_election_routes() -> None:
                             on_click=lambda: ui.timer(0, save_node, once=True),
                         ).props("unelevated")
 
-                async def on_election_change() -> None:
-                    state["election_id"] = election_select.value or ""
-                    state["validation"] = None
-                    await refresh_configuration()
-                    await refresh_candidates()
-                    render_validation()
+                credentials_dialog = ui.dialog().props("persistent")
+                with credentials_dialog, ui.card().classes("q-pa-md").style("min-width: 480px"):
+                    ui.label("Save Node Credentials").classes("text-h6")
+                    ui.label(
+                        "Copy these values now. The Node Secret is shown only once and cannot be recovered later."
+                    ).classes("text-body2 text-warning q-mt-sm q-mb-md")
+                    ui.label("Node ID").classes("text-caption text-grey-7")
+                    with ui.row().classes("w-full items-center q-gutter-sm q-mb-md"):
+                        node_id_value = ui.label("").classes("text-body2 text-weight-medium").style(
+                            "word-break: break-all; flex: 1"
+                        )
+                        ui.button(
+                            icon="content_copy",
+                            on_click=lambda: ui.timer(0, copy_node_id, once=True),
+                        ).props("flat round dense")
+                    ui.label("Node Secret").classes("text-caption text-grey-7")
+                    with ui.row().classes("w-full items-center q-gutter-sm q-mb-md"):
+                        node_secret_value = ui.label("").classes("text-body2 text-weight-medium").style(
+                            "word-break: break-all; flex: 1"
+                        )
+                        ui.button(
+                            icon="content_copy",
+                            on_click=lambda: ui.timer(0, copy_node_secret, once=True),
+                        ).props("flat round dense")
+                    ui.label(
+                        "Enter both on the voting PC under Admin → Node Config."
+                    ).classes("text-caption text-grey-7 q-mb-md")
+                    with ui.row().classes("justify-end"):
+                        ui.button(
+                            "I've saved these",
+                            color="primary",
+                            on_click=credentials_dialog.close,
+                        ).props("unelevated")
 
-                election_select.on(
-                    "update:model-value",
-                    lambda: ui.timer(0, on_election_change, once=True),
-                )
                 ui.timer(0.1, load_elections, once=True)
