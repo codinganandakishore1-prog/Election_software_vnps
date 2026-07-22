@@ -30,7 +30,9 @@ MANIFEST
 #   Usually these files are written by a python script from a template
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
+# Ignore generated specs; keep the checked-in Windows packaging spec.
 *.spec
+!desktop/packaging/ElectionVotingNode.spec
 
 # Installer logs
 pip-log.txt
@@ -151,6 +153,11 @@ activemq-data/
 .env
 .envrc
 .venv
+
+# Local SQLite bootstrap DB
+backend/data/
+*.db
+*.db-journal
 env/
 venv/
 ENV/
@@ -214,5 +221,19 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Streamlit
-.streamlit/secrets.toml
+# Application data
+backend/logs/
+backend/uploads/
+backend/generated_reports/
+backend/backups/
+backend/config_packages/
+desktop/logs/
+desktop/data/
+*.log
+
+# NiceGUI local session storage (may contain tokens)
+website/.nicegui/
+
+# Legacy root app (preserved reference)
+candidate_images/
+election_data.json

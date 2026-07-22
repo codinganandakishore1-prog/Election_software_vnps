@@ -1,0 +1,7 @@
+# Website — NiceGUI Administration Portal
+# Run with PYTHONPATH=shared:website (see deployment/scripts/start_website.sh)
+-r ../shared/requirements.txt
+nicegui>=1.4.0
+httpx>=0.27.0
+websockets>=12.0
+Pillow>=10.0.0

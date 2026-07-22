@@ -1,0 +1,26 @@
+# Cloudflare Tunnel configuration example
+# Docs: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+#
+# 1. Install cloudflared and run: cloudflared tunnel login
+# 2. Create tunnel:     cloudflared tunnel create election-ccu
+# 3. Copy this file to ~/.cloudflared/config.yml and fill in tunnel id + credentials path
+# 4. Optional DNS:      cloudflared tunnel route dns election-ccu election.example.com
+# 5. Run:               cloudflared tunnel run election-ccu
+#
+# Quick temporary public URL (no config file):
+#   cloudflared tunnel --url http://localhost:8080
+#
+# Ensure the Election website is already listening on port 8080
+# (bash deployment/scripts/start_website.sh) and the API on 8000.
+
+# tunnel: <tunnel-id>
+# credentials-file: /path/to/<tunnel-id>.json
+#
+# ingress:
+#   - hostname: election.example.com
+#     service: http://localhost:8080
+#   # Uncomment if you also expose the API publicly (usually not required;
+#   # the website talks to the API on the private/local network).
+#   # - hostname: api.election.example.com
+#   #   service: http://localhost:8000
+#   - service: http_status:404
