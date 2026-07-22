@@ -1,10 +1,13 @@
 # Desktop — CustomTkinter Voting Application
-# Run with PYTHONPATH=shared:desktop (see deployment/scripts/start_desktop.sh)
+# Run with PYTHONPATH=desktop:shared (see deployment/scripts/start_desktop.sh)
 -r ../shared/requirements.txt
 customtkinter>=5.2.0
 Pillow>=10.0.0
 requests>=2.31.0
 websockets>=12.0
 fakeredis>=2.21.0
+redis>=5.0.0
 sqlalchemy>=2.0.0
+greenlet>=3.0.0
 pymysql>=1.1.0
+python-dotenv>=1.0.0

@@ -30,7 +30,7 @@ jobs:
 
       - name: Build EXE
         env:
-          PYTHONPATH: ${{ github.workspace }}\shared;${{ github.workspace }}\desktop
+          PYTHONPATH: ${{ github.workspace }}\desktop;${{ github.workspace }}\shared
         run: |
           python -m PyInstaller --noconfirm --clean desktop/packaging/ElectionVotingNode.spec
 

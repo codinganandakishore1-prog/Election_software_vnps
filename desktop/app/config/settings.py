@@ -7,17 +7,26 @@ from election_platform.config.base import BaseAppSettings
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from app.runtime_paths import data_root, resource_root
+from app.runtime_paths import data_root, is_frozen, resource_root
 
 _DATA_ROOT = data_root()
 _RESOURCE_ROOT = resource_root()
+
+
+def _env_files() -> tuple[Path, ...]:
+    """Load .env next to the EXE when frozen; also repo-root .env in source runs."""
+    paths: list[Path] = [_DATA_ROOT / ".env"]
+    if not is_frozen():
+        # desktop/ → repo root (useful when developing from a full checkout)
+        paths.append(_RESOURCE_ROOT.parent / ".env")
+    return tuple(paths)
 
 
 class DesktopSettings(BaseAppSettings):
     """Desktop-specific settings."""
 
     model_config = SettingsConfigDict(
-        env_file=(_DATA_ROOT / ".env", _RESOURCE_ROOT.parent / ".env"),
+        env_file=_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )

@@ -1,4 +1,8 @@
-"""Legacy entry point — launches the refactored desktop application."""
+"""Legacy entry point — launches the refactored desktop application.
+
+Renamed from app.py so it does not shadow the desktop/app package
+(required for PyInstaller and PYTHONPATH=desktop imports).
+"""
 
 import sys
 from pathlib import Path

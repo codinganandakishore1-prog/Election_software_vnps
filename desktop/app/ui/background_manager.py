@@ -26,6 +26,8 @@ class BackgroundManager:
         self.bg_label: ctk.CTkLabel | None = None
         self._current_mode = "welcome"
         self._tk_image: ctk.CTkImage | None = None
+        # Cache of the last processed image: (path, mtime, width, height)
+        self._cache_key: tuple[str, float, int, int] | None = None
 
     def _resolve_path(self, path: str) -> str:
         if not path:
@@ -58,9 +60,35 @@ class BackgroundManager:
 
     def _screen_size(self) -> tuple[int, int]:
         self.root.update_idletasks()
-        width = self.root.winfo_width() or self.root.winfo_screenwidth()
-        height = self.root.winfo_height() or self.root.winfo_screenheight()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        # Before the window is mapped, winfo_width/height report 1 — fall back
+        # to the full screen size so the first paint is not a 1x1 image.
+        if width < 100 or height < 100:
+            width = self.root.winfo_screenwidth()
+            height = self.root.winfo_screenheight()
         return width, height
+
+    def _window_scaling(self) -> float:
+        """DPI scaling factor CTk applies to widget/image sizes (e.g. 1.5 at 150%)."""
+        try:
+            return float(ctk.ScalingTracker.get_window_scaling(self.root))
+        except Exception:
+            return 1.0
+
+    @staticmethod
+    def _cover_resize(image: Image.Image, width: int, height: int) -> Image.Image:
+        """Scale to fill width x height, cropping overflow (no distortion)."""
+        src_w, src_h = image.size
+        if src_w <= 0 or src_h <= 0:
+            return image.resize((width, height), Image.Resampling.LANCZOS)
+        scale = max(width / src_w, height / src_h)
+        new_w = max(width, int(src_w * scale + 0.5))
+        new_h = max(height, int(src_h * scale + 0.5))
+        image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        left = (new_w - width) // 2
+        top = (new_h - height) // 2
+        return image.crop((left, top, left + width, top + height))
 
     def _show_background(self, image_path: str) -> None:
         width, height = self._screen_size()
@@ -70,9 +98,26 @@ class BackgroundManager:
                 self.bg_label = None
             return
 
-        pil_image = Image.open(image_path)
-        pil_image = pil_image.resize((width, height), Image.Resampling.LANCZOS)
-        self._tk_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(width, height))
+        cache_key = (image_path, os.path.getmtime(image_path), width, height)
+        if cache_key != self._cache_key or self._tk_image is None:
+            with Image.open(image_path) as source:
+                source.load()
+                pil_image = self._cover_resize(source.convert("RGB"), width, height)
+
+            # CTk multiplies the requested size by the Windows DPI scaling factor.
+            # Compensate so the rendered image matches the window exactly instead
+            # of overflowing (which showed only the middle of the image).
+            scaling = self._window_scaling()
+            logical_size = (
+                max(1, round(width / scaling)),
+                max(1, round(height / scaling)),
+            )
+            self._tk_image = ctk.CTkImage(
+                light_image=pil_image,
+                dark_image=pil_image,
+                size=logical_size,
+            )
+            self._cache_key = cache_key
 
         if self.bg_label is None:
             self.bg_label = ctk.CTkLabel(self.root, text="", image=self._tk_image)
